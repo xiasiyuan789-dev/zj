@@ -1,0 +1,18 @@
+# Qoder Sites deployment descriptor (contains deployment IDs and secrets)
+.Fund Vault.qoder.site
+
+# Build output
+dist/
+dev/
+
+# Environment files
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/

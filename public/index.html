@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>基金金库 - 资产管理</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Global error toast -->
+  <div id="error-msg"></div>
+
+  <!-- Auth Screen -->
+  <div id="auth-screen">
+    <div class="auth-card">
+      <h1 id="auth-title">解锁金库</h1>
+      <p class="subtitle">你的资产数据，端到端加密保护</p>
+      <form id="auth-form" data-mode="login">
+        <div class="form-group">
+          <label for="password">密码</label>
+          <input type="password" id="password" placeholder="输入你的密码" required autocomplete="current-password">
+        </div>
+        <div class="form-group" id="confirm-group" style="display:none">
+          <label for="confirm">确认密码</label>
+          <input type="password" id="confirm" placeholder="再次输入密码" autocomplete="new-password">
+        </div>
+        <button type="submit" class="btn btn-primary" id="auth-submit">登录</button>
+      </form>
+      <span class="switch-link" id="switch-link" onclick="switchAuthMode(document.getElementById('auth-form').dataset.mode === 'login' ? 'register' : 'login')">
+        没有账户？去注册
+      </span>
+    </div>
+  </div>
+
+  <!-- Dashboard -->
+  <div id="dashboard">
+    <div class="header">
+      <h1>基金金库</h1>
+      <div class="actions">
+        <button class="btn btn-secondary btn-sm" onclick="openModal('modal-csv')">CSV 导入</button>
+        <button class="btn btn-secondary btn-sm" id="btn-logout">退出</button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="label">总资产</div>
+        <div class="value" id="total-assets">¥0.00</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">总收益</div>
+        <div class="value" id="total-pnl">¥0.00</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">收益率</div>
+        <div class="value" id="total-pnl-rate">0.00%</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">账户数</div>
+        <div class="value" id="account-count">0</div>
+      </div>
+    </div>
+
+    <!-- Asset Breakdown -->
+    <div class="asset-breakdown" id="asset-breakdown">
+      <div class="breakdown-item">
+        <span class="breakdown-label">现金</span>
+        <span class="breakdown-value" id="cash-total">¥0.00</span>
+      </div>
+      <div class="breakdown-item">
+        <span class="breakdown-label">投资</span>
+        <span class="breakdown-value" id="invest-total">¥0.00</span>
+      </div>
+    </div>
+
+    <!-- Trend Chart -->
+    <div class="section" id="trend-section" style="display:none">
+      <div class="section-header">
+        <h2>收益趋势</h2>
+        <div class="chart-range-btns">
+          <button class="btn btn-secondary btn-sm chart-range active" data-range="all">全部</button>
+          <button class="btn btn-secondary btn-sm chart-range" data-range="30">近30天</button>
+          <button class="btn btn-secondary btn-sm chart-range" data-range="7">近7天</button>
+        </div>
+      </div>
+      <div class="chart-container">
+        <canvas id="trend-chart"></canvas>
+        <div class="chart-tooltip" id="chart-tooltip"></div>
+      </div>
+    </div>
+
+    <!-- Accounts -->
+    <div class="section">
+      <div class="section-header">
+        <h2>基金账户</h2>
+        <button class="btn btn-primary btn-sm" onclick="openModal('modal-account')">+ 添加账户</button>
+      </div>
+      <div id="accounts-list"></div>
+    </div>
+
+    <!-- Holdings -->
+    <div class="section">
+      <div class="section-header">
+        <h2>持仓明细</h2>
+        <button class="btn btn-primary btn-sm" onclick="openModal('modal-holding')">+ 添加持仓</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>账户</th>
+              <th>产品类型</th>
+              <th>基金名称</th>
+              <th>份额</th>
+              <th>成本净值</th>
+              <th>最新净值</th>
+              <th>盈亏</th>
+              <th>日期</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="holdings-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Transactions -->
+    <div class="section">
+      <div class="section-header">
+        <h2>交易记录</h2>
+        <button class="btn btn-primary btn-sm" onclick="openModal('modal-transaction')">+ 添加交易</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>账户</th>
+              <th>基金名称</th>
+              <th>类型</th>
+              <th>价格</th>
+              <th>份额</th>
+              <th>金额</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="transactions-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- History -->
+    <div class="section" id="history-section" style="display:none">
+      <div class="section-header">
+        <h2>历史持仓</h2>
+      </div>
+      <div id="history-list"></div>
+    </div>
+  </div>
+
+  <!-- Modal: Add Account -->
+  <div class="modal" id="modal-account">
+    <div class="modal-content">
+      <h2>添加基金账户</h2>
+      <form id="form-account">
+        <div class="form-group">
+          <label>账户名称</label>
+          <input type="text" id="acc-name" placeholder="如：天天基金、支付宝、我的招商账户" required>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-account')">取消</button>
+          <button type="submit" class="btn btn-primary">添加</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Rename Account -->
+  <div class="modal" id="modal-rename-account">
+    <div class="modal-content">
+      <h2>修改账户名称</h2>
+      <form id="form-rename-account">
+        <input type="hidden" id="rename-acc-id">
+        <div class="form-group">
+          <label>账户名称</label>
+          <input type="text" id="rename-acc-name" placeholder="输入新名称" required>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-rename-account')">取消</button>
+          <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Holding -->
+  <div class="modal" id="modal-edit-holding">
+    <div class="modal-content">
+      <h2>修改持仓</h2>
+      <form id="form-edit-holding">
+        <input type="hidden" id="edit-holding-id">
+        <div class="form-group">
+          <label>所属账户</label>
+          <select id="edit-holding-account"></select>
+        </div>
+        <div class="form-group">
+          <label>产品类型</label>
+          <select id="edit-holding-product-type">
+            <option value="">选择产品类型</option>
+            <option value="股票型基金">股票型基金</option>
+            <option value="债券型基金">债券型基金</option>
+            <option value="现金">现金</option>
+            <option value="理财">理财</option>
+            <option value="股票">股票</option>
+            <option value="期权">期权</option>
+          </select>
+        </div>
+        <div class="form-group" id="edit-cash-group" style="display:none">
+          <label>现金金额</label>
+          <input type="number" id="edit-holding-cash-amount" step="0.01" placeholder="如：50000">
+        </div>
+        <div id="edit-investment-fields">
+          <div class="form-group">
+            <label>基金代码</label>
+            <input type="text" id="edit-holding-code" placeholder="如：000001">
+          </div>
+          <div class="form-group">
+            <label>基金名称</label>
+            <input type="text" id="edit-holding-name" placeholder="如：华夏成长混合">
+          </div>
+          <div class="form-group">
+            <label>持有份额 <span style="font-size:12px;color:var(--text-muted)">（选填）</span></label>
+            <input type="number" id="edit-holding-shares" step="0.01">
+          </div>
+          <div class="form-group">
+            <label>成本净值 <span style="font-size:12px;color:var(--text-muted)">（选填）</span></label>
+            <input type="number" id="edit-holding-cost" step="0.0001">
+          </div>
+          <div class="form-group">
+            <label>最新净值 <span style="font-size:12px;color:var(--text-muted)">（选填）</span></label>
+            <input type="number" id="edit-holding-nav" step="0.0001">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>日期</label>
+          <input type="date" id="edit-holding-date">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-edit-holding')">取消</button>
+          <button type="submit" class="btn btn-primary">保存修改</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add Holding -->
+  <div class="modal" id="modal-holding">
+    <div class="modal-content">
+      <h2>添加持仓</h2>
+      <form id="form-holding">
+        <div class="form-group">
+          <label>所属账户 <span class="required">*</span></label>
+          <select id="hold-account">
+            <option value="">选择账户</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>产品类型 <span class="required">*</span></label>
+          <select id="hold-product-type">
+            <option value="">选择产品类型</option>
+            <option value="股票型基金">股票型基金</option>
+            <option value="债券型基金">债券型基金</option>
+            <option value="现金">现金</option>
+            <option value="理财">理财</option>
+            <option value="股票">股票</option>
+            <option value="期权">期权</option>
+          </select>
+        </div>
+        <div id="holding-upload-area" style="display:none">
+          <div class="image-upload-area" id="holding-upload-trigger">
+            <div class="upload-icon">📷</div>
+            <p>点击上传持仓截图</p>
+            <p class="upload-hint">支持识别产品名称、份额、成本净值、最新净值</p>
+            <input type="file" id="holding-image" accept="image/*" style="display:none">
+          </div>
+          <div id="holding-preview" class="image-preview" style="display:none">
+            <img id="holding-preview-img" alt="预览">
+            <div class="preview-actions">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="clearImagePreview('holding')">重新选择</button>
+            </div>
+          </div>
+          <div class="manual-entry-link">
+            <a href="javascript:void(0)" onclick="openManualEntry('holding')">手动录入</a>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-holding')">取消</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add Transaction -->
+  <div class="modal" id="modal-transaction">
+    <div class="modal-content">
+      <h2>添加交易记录</h2>
+      <form id="form-transaction">
+        <div class="form-group">
+          <label>所属账户 <span class="required">*</span></label>
+          <select id="tx-account">
+            <option value="">选择账户</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>基金名称 <span class="required">*</span></label>
+          <select id="tx-fund">
+            <option value="">选择持仓基金</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>交易类型</label>
+          <select id="tx-type">
+            <option value="buy">买入</option>
+            <option value="sell">卖出</option>
+            <option value="dividend">分红</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>价格 <span class="required">*</span></label>
+          <input type="number" id="tx-price" step="0.0001" placeholder="如：1.2345">
+        </div>
+        <div class="form-group">
+          <label>交易份额 <span class="required">*</span></label>
+          <input type="number" id="tx-shares" step="0.01" placeholder="如：8100">
+        </div>
+        <div class="form-group">
+          <label>交易金额（自动计算）</label>
+          <input type="number" id="tx-amount" step="0.01" placeholder="价格×份额" readonly style="background:var(--border);opacity:0.7">
+        </div>
+        <div class="form-group">
+          <label>日期</label>
+          <input type="date" id="tx-date">
+        </div>
+        <div id="tx-upload-area" style="display:none">
+          <div class="image-upload-area" id="tx-upload-trigger">
+            <div class="upload-icon">📷</div>
+            <p>点击上传交易截图</p>
+            <p class="upload-hint">支持识别交易类型、金额、份额</p>
+            <input type="file" id="tx-image" accept="image/*" style="display:none">
+          </div>
+          <div id="tx-preview" class="image-preview" style="display:none">
+            <img id="tx-preview-img" alt="预览">
+            <div class="preview-actions">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="clearImagePreview('tx')">重新选择</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-transaction')">取消</button>
+          <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: OCR Confirmation -->
+  <div class="modal" id="modal-ocr-confirm">
+    <div class="modal-content">
+      <h2 id="ocr-confirm-title">确认识别结果</h2>
+      <form id="form-ocr-confirm">
+        <div class="form-group">
+          <label>所属账户 <span class="required">*</span></label>
+          <select id="ocr-account"></select>
+        </div>
+        <div class="form-group" id="ocr-product-type-group">
+          <label>产品类型 <span class="required">*</span></label>
+          <select id="ocr-product-type">
+            <option value="">选择产品类型</option>
+            <option value="股票型基金">股票型基金</option>
+            <option value="债券型基金">债券型基金</option>
+            <option value="现金">现金</option>
+            <option value="理财">理财</option>
+            <option value="股票">股票</option>
+            <option value="期权">期权</option>
+          </select>
+        </div>
+        <div class="form-group" id="ocr-cash-group" style="display:none">
+          <label>现金金额</label>
+          <input type="number" id="ocr-cash-amount" step="0.01" placeholder="如：50000">
+        </div>
+        <div id="ocr-investment-fields">
+        <div class="form-group">
+          <label>基金代码</label>
+          <input type="text" id="ocr-code" placeholder="如：000001">
+        </div>
+        <div class="form-group">
+          <label>基金名称</label>
+          <input type="text" id="ocr-name" placeholder="如：华夏成长混合">
+        </div>
+        <div id="ocr-holding-fields">
+          <div class="form-group">
+            <label>持有份额 <span style="font-size:12px;color:var(--text-muted)">（选填，可根据交易记录计算）</span></label>
+            <input type="number" id="ocr-shares" step="0.01" placeholder="如：10000">
+          </div>
+          <div class="form-group">
+            <label>成本净值 <span style="font-size:12px;color:var(--text-muted)">（选填，可根据交易记录计算）</span></label>
+            <input type="number" id="ocr-cost" step="0.0001" placeholder="如：1.2345">
+          </div>
+          <div class="form-group">
+            <label>最新净值 <span style="font-size:12px;color:var(--text-muted)">（选填）</span></label>
+            <input type="number" id="ocr-nav" step="0.0001" placeholder="如：1.5678">
+          </div>
+        </div>
+        </div><!-- end ocr-investment-fields -->
+        <div id="ocr-transaction-fields" style="display:none">
+          <div class="form-group">
+            <label>基金名称 <span class="required">*</span></label>
+            <select id="ocr-tx-fund">
+              <option value="">选择持仓基金</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>交易类型</label>
+            <select id="ocr-tx-type">
+              <option value="buy">买入</option>
+              <option value="sell">卖出</option>
+              <option value="dividend">分红</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>价格 <span class="required">*</span></label>
+            <input type="number" id="ocr-price" step="0.0001" placeholder="如：1.2345">
+          </div>
+          <div class="form-group">
+            <label>交易份额</label>
+            <input type="number" id="ocr-tx-shares" step="0.01" placeholder="如：8100">
+          </div>
+          <div class="form-group">
+            <label>交易金额（自动计算）</label>
+            <input type="number" id="ocr-amount" step="0.01" placeholder="价格×份额" readonly style="background:var(--border);opacity:0.7">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>日期</label>
+          <input type="date" id="ocr-date">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-ocr-confirm')">取消</button>
+          <button type="submit" class="btn btn-primary">确认保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: CSV Import -->
+  <div class="modal" id="modal-csv">
+    <div class="modal-content">
+      <h2>CSV 导入</h2>
+      <form id="form-csv">
+        <div class="form-group">
+          <label>导入到账户</label>
+          <select id="csv-account" required></select>
+        </div>
+        <div class="form-group">
+          <label>导入类型</label>
+          <select id="csv-type">
+            <option value="holdings">持仓数据</option>
+            <option value="transactions">交易记录</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>CSV 文件</label>
+          <input type="file" id="csv-file" accept=".csv" required>
+        </div>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:8px">
+          持仓 CSV 列名：基金代码, 基金名称, 份额, 成本净值, 最新净值<br>
+          交易 CSV 列名：基金代码, 基金名称, 类型, 金额, 份额, 日期
+        </p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-csv')">取消</button>
+          <button type="submit" class="btn btn-primary">导入</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Transaction -->
+  <div class="modal" id="modal-edit-transaction">
+    <div class="modal-content">
+      <h2>修改交易记录</h2>
+      <form id="form-edit-transaction">
+        <input type="hidden" id="edit-tx-id">
+        <div class="form-group">
+          <label>所属账户 <span class="required">*</span></label>
+          <select id="edit-tx-account"></select>
+        </div>
+        <div class="form-group">
+          <label>基金名称 <span class="required">*</span></label>
+          <select id="edit-tx-fund"></select>
+        </div>
+        <div class="form-group">
+          <label>交易类型</label>
+          <select id="edit-tx-type">
+            <option value="buy">买入</option>
+            <option value="sell">卖出</option>
+            <option value="dividend">分红</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>价格 <span class="required">*</span></label>
+          <input type="number" id="edit-tx-price" step="0.0001" placeholder="如：1.2345">
+        </div>
+        <div class="form-group">
+          <label>交易份额 <span class="required">*</span></label>
+          <input type="number" id="edit-tx-shares" step="0.01" placeholder="如：8100">
+        </div>
+        <div class="form-group">
+          <label>交易金额（自动计算）</label>
+          <input type="number" id="edit-tx-amount" step="0.01" readonly style="background:var(--border);opacity:0.7">
+        </div>
+        <div class="form-group">
+          <label>日期</label>
+          <input type="date" id="edit-tx-date">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-edit-transaction')">取消</button>
+          <button type="submit" class="btn btn-primary">保存修改</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- OCR Loading Overlay -->
+  <div class="ocr-loading" id="ocr-loading" style="display:none">
+    <div class="ocr-loading-content">
+      <div class="spinner"></div>
+      <p id="ocr-loading-text">正在加载识别引擎...</p>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
