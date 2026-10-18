@@ -308,40 +308,62 @@
       <h2>添加交易记录</h2>
       <form id="form-transaction">
         <div class="form-group">
-          <label>所属账户 <span class="required">*</span></label>
-          <select id="tx-account">
-            <option value="">选择账户</option>
-          </select>
+          <label>选择账户与基金 <span class="required">*</span></label>
+          <div id="tx-fund-picker" class="fund-picker"></div>
         </div>
-        <div class="form-group">
-          <label>基金名称 <span class="required">*</span></label>
-          <select id="tx-fund">
-            <option value="">选择持仓基金</option>
-          </select>
+        <div class="cash-balance-bar" id="tx-cash-bar" style="display:none">
+          <span>账户现金余额</span>
+          <span class="cash-balance-value" id="tx-cash-balance">¥0.00</span>
         </div>
-        <div class="form-group">
-          <label>交易类型</label>
-          <select id="tx-type">
-            <option value="buy">买入</option>
-            <option value="sell">卖出</option>
-            <option value="dividend">分红</option>
-          </select>
+        <div id="tx-normal-fields" style="display:none">
+          <div class="form-group">
+            <label>交易类型</label>
+            <select id="tx-type">
+              <option value="buy">买入</option>
+              <option value="sell">卖出</option>
+              <option value="dividend">分红</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>价格 <span class="required">*</span></label>
+            <input type="number" id="tx-price" step="0.0001" placeholder="如：1.2345">
+          </div>
+          <div class="form-group">
+            <label>交易份额 <span class="required">*</span></label>
+            <input type="number" id="tx-shares" step="0.01" placeholder="如：8100">
+          </div>
+          <div class="form-group">
+            <label>交易金额（自动计算）</label>
+            <input type="number" id="tx-amount" step="0.01" placeholder="价格×份额" readonly style="background:var(--border);opacity:0.7">
+          </div>
+          <div class="form-group">
+            <label>日期</label>
+            <input type="date" id="tx-date">
+          </div>
         </div>
-        <div class="form-group">
-          <label>价格 <span class="required">*</span></label>
-          <input type="number" id="tx-price" step="0.0001" placeholder="如：1.2345">
-        </div>
-        <div class="form-group">
-          <label>交易份额 <span class="required">*</span></label>
-          <input type="number" id="tx-shares" step="0.01" placeholder="如：8100">
-        </div>
-        <div class="form-group">
-          <label>交易金额（自动计算）</label>
-          <input type="number" id="tx-amount" step="0.01" placeholder="价格×份额" readonly style="background:var(--border);opacity:0.7">
-        </div>
-        <div class="form-group">
-          <label>日期</label>
-          <input type="date" id="tx-date">
+        <div id="tx-transfer-fields" style="display:none">
+          <div class="form-group">
+            <label>交易类型</label>
+            <input type="text" value="转账" readonly style="background:var(--border);opacity:0.7">
+          </div>
+          <div class="form-group">
+            <label>转账金额 <span class="required">*</span></label>
+            <input type="number" id="tx-transfer-amount" step="0.01" placeholder="如：5000">
+          </div>
+          <div class="form-group">
+            <label>转入账户 <span class="required">*</span></label>
+            <select id="tx-to-account">
+              <option value="">选择转入账户</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>转入基金（仅现金）<span class="required">*</span></label>
+            <select id="tx-to-fund"></select>
+          </div>
+          <div class="form-group">
+            <label>日期</label>
+            <input type="date" id="tx-transfer-date">
+          </div>
         </div>
         <div id="tx-upload-area" style="display:none">
           <div class="image-upload-area" id="tx-upload-trigger">

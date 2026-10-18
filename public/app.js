@@ -16,40 +16,72 @@ let chartRange = 'all';
 
 const PRODUCT_TYPES = ['股票型基金', '债券型基金', '现金', '理财', '股票', '期权'];
 
-// Calculate average cost per share from transactions for a specific holding
-function calculateCostFromTransactions(holding, transactions) {
-  // Match transactions by fundCode or fundName + accountId
-  const matchingTx = transactions.filter(t => {
-    if (t.accountId !== holding.accountId) return false;
-    if (holding.fundCode && t.fundCode) return t.fundCode === holding.fundCode;
-    return t.fundName === holding.fundName;
-  });
+// --- Cash & holding side effects of transactions ---
+const EPSILON = 0.000001;
 
-  if (matchingTx.length === 0) return null;
+function roundMoney(v) { return Math.round(v * 100) / 100; }
 
-  // Sort by date
-  const sorted = [...matchingTx].sort((a, b) => a.date.localeCompare(b.date));
+function getCashHoldings(accountId) {
+  return (vaultData?.holdings || []).filter(h => h.accountId === accountId && h.productType === '现金');
+}
 
-  let totalShares = 0;
-  let totalCost = 0;
+function getAccountCash(accountId) {
+  return getCashHoldings(accountId).reduce((sum, h) => sum + (h.shares || 0), 0);
+}
 
-  for (const tx of sorted) {
-    if (tx.type === 'buy') {
-      totalShares += tx.shares;
-      totalCost += tx.amount;
-    } else if (tx.type === 'sell') {
-      // On sell, reduce shares but keep average cost the same
-      if (totalShares > 0) {
-        const avgCost = totalCost / totalShares;
-        totalShares -= tx.shares;
-        totalCost = totalShares * avgCost;
-      }
+function makeCashHolding(accountId, amount, date) {
+  return { id: crypto.randomUUID(), accountId, productType: '现金', fundCode: '', fundName: '', shares: roundMoney(amount), costPerShare: 1, currentNav: 1, date };
+}
+
+// Apply a cash delta to an account; positive creates a cash holding if the account has none
+function adjustAccountCash(accountId, delta) {
+  const cashList = getCashHoldings(accountId);
+  if (delta >= 0) {
+    if (cashList.length === 0) {
+      vaultData.holdings.push(makeCashHolding(accountId, delta, new Date().toISOString().split('T')[0]));
+    } else {
+      cashList[0].shares = roundMoney((cashList[0].shares || 0) + delta);
     }
-    // dividend doesn't affect cost basis
+    return;
   }
+  let need = -delta;
+  for (const h of cashList) {
+    const take = Math.min(h.shares || 0, need);
+    h.shares = roundMoney((h.shares || 0) - take);
+    need -= take;
+    if (need <= EPSILON) break;
+  }
+}
 
-  if (totalShares <= 0) return null;
-  return totalCost / totalShares;
+function getFundHolding(accountId, fundCode, fundName) {
+  const list = (vaultData?.holdings || []).filter(h => h.accountId === accountId && h.productType !== '现金');
+  if (fundCode) {
+    const byCode = list.find(h => h.fundCode === fundCode);
+    if (byCode) return byCode;
+  }
+  return list.find(h => h.fundName === fundName);
+}
+
+// Validate then apply buy/sell side effects on holdings and cash; returns an error message or null
+function applyTransactionEffects({ accountId, fundCode, fundName, type, price, shares }) {
+  const amount = price * shares;
+  if (type === 'buy') {
+    if (getAccountCash(accountId) + EPSILON < amount) return '现金不足';
+    const holding = getFundHolding(accountId, fundCode, fundName);
+    if (holding) {
+      holding.shares = roundMoney((holding.shares || 0) + shares);
+    } else {
+      vaultData.holdings.push({ id: crypto.randomUUID(), accountId, productType: '', fundCode: fundCode || '', fundName, shares, costPerShare: price, currentNav: price, date: new Date().toISOString().split('T')[0] });
+    }
+    adjustAccountCash(accountId, -amount);
+  } else if (type === 'sell') {
+    const holding = getFundHolding(accountId, fundCode, fundName);
+    if (!holding || (holding.shares || 0) + EPSILON < shares) return '份额不足';
+    holding.shares = roundMoney((holding.shares || 0) - shares);
+    adjustAccountCash(accountId, amount);
+  }
+  // dividend has no side effects on holdings or cash
+  return null;
 }
 
 // Calculate shares and cost from transactions for a fund (used when adding new holding)
@@ -185,11 +217,9 @@ function captureSnapshot() {
 
   let totalValue = 0, totalCost = 0;
   const items = holdings.map(h => {
-    const value = h.shares * h.currentNav;
-    const txCalc = calculateSharesAndCostFromTransactions(h.accountId, h.fundCode, h.fundName);
-    const hasTxData = !isNaN(txCalc.shares) && txCalc.shares > 0;
-    const shares = hasTxData ? txCalc.shares : h.shares;
-    const costPerShare = hasTxData ? txCalc.costPerShare : h.costPerShare;
+    const shares = h.shares || 0;
+    const value = shares * (h.currentNav || 0);
+    const costPerShare = h.costPerShare || 0;
     const cost = shares * costPerShare;
     totalValue += value;
     totalCost += cost;
@@ -238,13 +268,9 @@ function renderDashboard() {
   let totalAssets = 0, totalCost = 0, cashTotal = 0, investTotal = 0;
 
   holdings.forEach(h => {
-    const value = h.shares * h.currentNav;
-    // Use calculated shares and cost from transactions if available
-    const txCalc = calculateSharesAndCostFromTransactions(h.accountId, h.fundCode, h.fundName);
-    const hasTxData = !isNaN(txCalc.shares) && txCalc.shares > 0;
-    const shares = hasTxData ? txCalc.shares : h.shares;
-    const costPerShare = hasTxData ? txCalc.costPerShare : h.costPerShare;
-    const cost = shares * costPerShare;
+    const shares = h.shares || 0;
+    const value = shares * (h.currentNav || 0);
+    const cost = shares * (h.costPerShare || 0);
     totalAssets += value;
     totalCost += cost;
     if (h.productType === '现金') {
@@ -281,14 +307,8 @@ function renderAccounts(accounts, holdings, transactions) {
   }
   container.innerHTML = accounts.map(acc => {
     const accHoldings = holdings.filter(h => h.accountId === acc.id);
-    const accValue = accHoldings.reduce((sum, h) => sum + h.shares * h.currentNav, 0);
-    const accCost = accHoldings.reduce((sum, h) => {
-      const txCalc = calculateSharesAndCostFromTransactions(h.accountId, h.fundCode, h.fundName);
-      const hasTxData = !isNaN(txCalc.shares) && txCalc.shares > 0;
-      const shares = hasTxData ? txCalc.shares : h.shares;
-      const costPerShare = hasTxData ? txCalc.costPerShare : h.costPerShare;
-      return sum + shares * costPerShare;
-    }, 0);
+    const accValue = accHoldings.reduce((sum, h) => sum + (h.shares || 0) * (h.currentNav || 0), 0);
+    const accCost = accHoldings.reduce((sum, h) => sum + (h.shares || 0) * (h.costPerShare || 0), 0);
     const accPnl = accValue - accCost;
     return `
       <div class="account-card">
@@ -317,14 +337,10 @@ function renderHoldings(holdings, accounts) {
   tbody.innerHTML = holdings.map(h => {
     const acc = accounts.find(a => a.id === h.accountId);
     const isCash = h.productType === '现金';
-    const marketValue = h.shares * h.currentNav;
+    const marketValue = (h.shares || 0) * (h.currentNav || 0);
 
-    // Calculate shares and cost from transactions if available
-    const txCalc = calculateSharesAndCostFromTransactions(h.accountId, h.fundCode, h.fundName);
-    const hasTxData = !isNaN(txCalc.shares) && txCalc.shares > 0;
-    const displayShares = hasTxData ? txCalc.shares : h.shares;
-    const costPerShare = hasTxData ? txCalc.costPerShare : h.costPerShare;
-    const calcCost = hasTxData ? costPerShare : null;
+    const displayShares = h.shares || 0;
+    const costPerShare = h.costPerShare || 0;
 
     const costValue = displayShares * costPerShare;
     const pnl = marketValue - costValue;
@@ -343,8 +359,8 @@ function renderHoldings(holdings, accounts) {
           <td><button class="btn-edit" onclick="editHolding('${h.id}')">编辑</button></td>
         </tr>`;
     }
-    const costLabel = calcCost !== null ? `${costPerShare.toFixed(4)} <span class="cost-calculated">(交易计算)</span>` : costPerShare.toFixed(4);
-    const sharesLabel = hasTxData ? `${displayShares.toFixed(2)} <span class="cost-calculated">(交易计算)</span>` : displayShares.toFixed(2);
+    const costLabel = costPerShare.toFixed(4);
+    const sharesLabel = displayShares.toFixed(2);
     return `
       <tr>
         <td>${esc(acc?.name || '未知')}</td>
@@ -352,7 +368,7 @@ function renderHoldings(holdings, accounts) {
         <td>${esc(h.fundName)}</td>
         <td>${sharesLabel}</td>
         <td>${costLabel}</td>
-        <td>${h.currentNav.toFixed(4)}</td>
+        <td>${(h.currentNav || 0).toFixed(4)}</td>
         <td class="${pnl >= 0 ? 'positive' : 'negative'}">
           ${pnl >= 0 ? '+' : ''}¥${pnl.toFixed(2)} (${pnl >= 0 ? '+' : ''}${pnlRate}%)
         </td>
@@ -371,19 +387,28 @@ function renderTransactions(transactions, accounts) {
   const sorted = [...transactions].sort((a, b) => b.date.localeCompare(a.date));
   tbody.innerHTML = sorted.map(t => {
     const acc = accounts.find(a => a.id === t.accountId);
-    const typeLabel = t.type === 'buy' ? '买入' : t.type === 'sell' ? '卖出' : '分红';
-    const typeClass = t.type === 'buy' ? 'buy' : t.type === 'sell' ? 'sell' : 'dividend';
+    const isTransfer = t.type === 'transfer';
+    const typeLabel = t.type === 'buy' ? '买入' : t.type === 'sell' ? '卖出' : isTransfer ? '转账' : '分红';
+    const typeClass = t.type === 'buy' ? 'buy' : t.type === 'sell' ? 'sell' : isTransfer ? 'transfer' : 'dividend';
     const priceStr = t.price != null ? t.price.toFixed(4) : '-';
+    const sharesStr = t.shares != null ? t.shares.toFixed(2) : '-';
+    const toAcc = isTransfer ? accounts.find(a => a.id === t.toAccountId) : null;
+    const accCell = isTransfer
+      ? `${esc(acc?.name || '未知')} → ${esc(toAcc?.name || '未知')}`
+      : esc(acc?.name || '未知');
+    const editCell = isTransfer
+      ? '<span class="tx-edit-disabled">-</span>'
+      : `<button class="btn-edit" onclick="editTransaction('${t.id}')">编辑</button>`;
     return `
       <tr>
         <td>${esc(t.date)}</td>
-        <td>${esc(acc?.name || '未知')}</td>
+        <td>${accCell}</td>
         <td>${esc(t.fundName)}</td>
         <td><span class="tx-type ${typeClass}">${typeLabel}</span></td>
         <td>${priceStr}</td>
-        <td>${t.shares.toFixed(2)}</td>
+        <td>${sharesStr}</td>
         <td>${t.type === 'dividend' ? '-' : `¥${t.amount.toFixed(2)}`}</td>
-        <td><button class="btn-edit" onclick="editTransaction('${t.id}')">编辑</button></td>
+        <td>${editCell}</td>
       </tr>`;
   }).join('');
 }
@@ -757,8 +782,8 @@ function populateProductTypeSelect(selectId, currentValue) {
 }
 
 function openModal(id) {
-  if (id === 'modal-holding' || id === 'modal-transaction' || id === 'modal-csv') {
-    const selectMap = { 'modal-holding': 'hold-account', 'modal-transaction': 'tx-account', 'modal-csv': 'csv-account' };
+  if (id === 'modal-holding' || id === 'modal-csv') {
+    const selectMap = { 'modal-holding': 'hold-account', 'modal-csv': 'csv-account' };
     populateAccountSelect(selectMap[id]);
   }
   if (id === 'modal-holding') {
@@ -767,14 +792,23 @@ function openModal(id) {
     document.getElementById('hold-product-type').value = '';
   }
   if (id === 'modal-transaction') {
+    const today = new Date().toISOString().split('T')[0];
+    txSelection = null;
+    renderTxFundPicker();
+    document.getElementById('tx-cash-bar').style.display = 'none';
+    document.getElementById('tx-normal-fields').style.display = 'none';
+    document.getElementById('tx-transfer-fields').style.display = 'none';
     document.getElementById('tx-upload-area').style.display = 'none';
     clearImagePreview('tx');
-    document.getElementById('tx-fund').innerHTML = '<option value="">选择持仓基金</option>';
     document.getElementById('tx-type').value = 'buy';
     document.getElementById('tx-price').value = '';
-    document.getElementById('tx-amount').value = '';
     document.getElementById('tx-shares').value = '';
-    document.getElementById('tx-date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('tx-amount').value = '';
+    document.getElementById('tx-date').value = today;
+    document.getElementById('tx-transfer-amount').value = '';
+    document.getElementById('tx-to-account').value = '';
+    populateToFundSelect('');
+    document.getElementById('tx-transfer-date').value = today;
   }
   document.getElementById(id).style.display = 'flex';
 }
@@ -787,31 +821,89 @@ function checkHoldingUploadVisibility() {
   if (acc && pt) pendingProductType = pt;
 }
 
-function checkTxUploadVisibility() {
-  const acc = document.getElementById('tx-account').value;
-  document.getElementById('tx-upload-area').style.display = acc ? 'block' : 'none';
-  // Populate fund dropdown when account changes
-  populateTxFundSelectDirect(acc);
+// --- Transaction modal: tiled account/fund picker ---
+let txSelection = null; // { accountId, holdingId, isCash, fundCode, fundName }
+
+function renderTxFundPicker() {
+  const container = document.getElementById('tx-fund-picker');
+  const accounts = vaultData?.accounts || [];
+  const holdings = vaultData?.holdings || [];
+  if (accounts.length === 0) {
+    container.innerHTML = '<div class="picker-empty">暂无账户，请先添加基金账户和持仓</div>';
+    return;
+  }
+  container.innerHTML = accounts.map(acc => {
+    const accHoldings = holdings.filter(h => h.accountId === acc.id);
+    const cashList = accHoldings.filter(h => h.productType === '现金');
+    const funds = accHoldings.filter(h => h.productType !== '现金' && h.fundName);
+    const tiles = [
+      ...cashList.map(h => pickerTileHtml(h, '现金', `¥${(h.shares || 0).toFixed(2)}`, '💰')),
+      ...funds.map(h => pickerTileHtml(h, h.fundCode ? `${h.fundName} (${h.fundCode})` : h.fundName, `${(h.shares || 0).toFixed(2)}份`, '📈'))
+    ].join('');
+    return `
+      <div class="picker-account">
+        <div class="picker-account-header">
+          <span class="picker-account-name">${esc(acc.name)}</span>
+          <span class="picker-account-cash">现金 ¥${getAccountCash(acc.id).toFixed(2)}</span>
+        </div>
+        <div class="picker-funds">${tiles || '<span class="picker-no-fund">无持仓</span>'}</div>
+      </div>`;
+  }).join('');
 }
 
-// Populate the tx-fund dropdown directly in the transaction modal
-function populateTxFundSelectDirect(accountId) {
-  const select = document.getElementById('tx-fund');
-  if (!select) return;
-  select.innerHTML = '<option value="">选择持仓基金</option>';
-  if (!accountId) return;
-  const holdings = (vaultData?.holdings || []).filter(h => h.accountId === accountId && h.productType !== '现金');
-  const seen = new Set();
-  holdings.forEach(h => {
-    if (!h.fundName || seen.has(h.fundName)) return;
-    seen.add(h.fundName);
-    const label = h.fundCode ? `${h.fundName} (${h.fundCode})` : h.fundName;
-    const opt = document.createElement('option');
-    opt.value = h.fundName;
-    opt.textContent = label;
-    opt.dataset.fundCode = h.fundCode || '';
-    select.appendChild(opt);
-  });
+function pickerTileHtml(h, label, sub, icon) {
+  const selected = txSelection && txSelection.holdingId === h.id;
+  return `<button type="button" class="picker-tile${selected ? ' selected' : ''}" data-holding="${h.id}" onclick="selectTxFund('${h.id}')">
+    <span class="picker-tile-icon">${icon}</span>
+    <span class="picker-tile-body">
+      <span class="picker-tile-name">${esc(label)}</span>
+      <span class="picker-tile-sub">${esc(sub)}</span>
+    </span>
+  </button>`;
+}
+
+window.selectTxFund = function(holdingId) {
+  const h = (vaultData?.holdings || []).find(x => x.id === holdingId);
+  if (!h) return;
+  txSelection = {
+    accountId: h.accountId,
+    holdingId: h.id,
+    isCash: h.productType === '现金',
+    fundCode: h.fundCode || '',
+    fundName: h.fundName || ''
+  };
+  document.querySelectorAll('#tx-fund-picker .picker-tile').forEach(b =>
+    b.classList.toggle('selected', b.dataset.holding === holdingId));
+  document.getElementById('tx-cash-bar').style.display = 'flex';
+  document.getElementById('tx-cash-balance').textContent = `¥${getAccountCash(h.accountId).toFixed(2)}`;
+  const isCash = txSelection.isCash;
+  document.getElementById('tx-normal-fields').style.display = isCash ? 'none' : 'block';
+  document.getElementById('tx-transfer-fields').style.display = isCash ? 'block' : 'none';
+  document.getElementById('tx-upload-area').style.display = isCash ? 'none' : 'block';
+  if (isCash) populateToAccountSelect();
+};
+
+function populateToAccountSelect() {
+  const sel = document.getElementById('tx-to-account');
+  const accounts = vaultData?.accounts || [];
+  sel.innerHTML = '<option value="">选择转入账户</option>' +
+    accounts.map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join('');
+  populateToFundSelect('');
+}
+
+function populateToFundSelect(toAccountId) {
+  const sel = document.getElementById('tx-to-fund');
+  if (!toAccountId) {
+    sel.innerHTML = '<option value="">先选择转入账户</option>';
+    return;
+  }
+  const cashList = getCashHoldings(toAccountId).filter(h => !txSelection || h.id !== txSelection.holdingId);
+  if (cashList.length === 0) {
+    sel.innerHTML = '<option value="__new__">现金（转账后自动创建）</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">选择转入基金</option>' +
+    cashList.map(h => `<option value="${h.id}">现金（余额 ¥${(h.shares || 0).toFixed(2)}）</option>`).join('');
 }
 
 // --- Account ---
@@ -960,7 +1052,7 @@ function showOCRConfirmation(data, type) {
     const srcAcc = document.getElementById('hold-account').value;
     if (srcAcc) document.getElementById('ocr-account').value = srcAcc;
   } else {
-    const srcAcc = document.getElementById('tx-account').value;
+    const srcAcc = txSelection?.accountId || '';
     if (srcAcc) document.getElementById('ocr-account').value = srcAcc;
   }
   const holdingFields = document.getElementById('ocr-holding-fields');
@@ -1018,7 +1110,7 @@ window.openManualEntry = function(type) {
     document.getElementById('ocr-cash-group').style.display = isCash ? 'block' : 'none';
     document.getElementById('ocr-investment-fields').style.display = isCash ? 'none' : 'block';
   } else {
-    const srcAcc = document.getElementById('tx-account').value;
+    const srcAcc = txSelection?.accountId || '';
     if (srcAcc) document.getElementById('ocr-account').value = srcAcc;
     document.getElementById('ocr-holding-fields').style.display = 'none';
     document.getElementById('ocr-transaction-fields').style.display = 'block';
@@ -1078,13 +1170,16 @@ function handleOCRConfirm(e) {
     } else {
       const fundName = document.getElementById('ocr-tx-fund').value;
       if (!fundName) return showError('请选择基金');
-      const fundCode = document.getElementById('ocr-code').value.trim();
+      const selectedOption = document.getElementById('ocr-tx-fund').options[document.getElementById('ocr-tx-fund').selectedIndex];
+      const fundCode = document.getElementById('ocr-code').value.trim() || selectedOption.dataset.fundCode || '';
       const type = document.getElementById('ocr-tx-type').value;
       const price = parseFloat(document.getElementById('ocr-price').value);
       if (isNaN(price)) return showError('请填写价格');
       const shares = parseFloat(document.getElementById('ocr-tx-shares').value);
       if (isNaN(shares)) return showError('请填写交易份额');
       const amount = price * shares;
+      const err = applyTransactionEffects({ accountId, fundCode, fundName, type, price, shares });
+      if (err) return showError(err);
       vaultData.transactions.push({ id: crypto.randomUUID(), accountId, fundCode, fundName, type, price, amount, shares, date });
     }
     closeModal('modal-ocr-confirm');
@@ -1096,20 +1191,43 @@ function handleOCRConfirm(e) {
 
 function handleAddTransaction(e) {
   e.preventDefault();
-  const accountId = document.getElementById('tx-account').value;
-  if (!accountId) return showError('请选择账户');
-  const fundName = document.getElementById('tx-fund').value;
-  if (!fundName) return showError('请选择基金');
-  const selectedOption = document.getElementById('tx-fund').options[document.getElementById('tx-fund').selectedIndex];
-  const fundCode = selectedOption.dataset.fundCode || '';
-  const type = document.getElementById('tx-type').value;
-  const price = parseFloat(document.getElementById('tx-price').value);
-  if (isNaN(price)) return showError('请填写价格');
-  const shares = parseFloat(document.getElementById('tx-shares').value);
-  if (isNaN(shares)) return showError('请填写交易份额');
-  const amount = price * shares;
-  const date = document.getElementById('tx-date').value || new Date().toISOString().split('T')[0];
-  vaultData.transactions.push({ id: crypto.randomUUID(), accountId, fundCode, fundName, type, price, amount, shares, date });
+  if (!txSelection) return showError('请先选择账户和基金');
+  const today = new Date().toISOString().split('T')[0];
+
+  if (txSelection.isCash) {
+    // Transfer: source cash holding -> target cash holding
+    const amount = parseFloat(document.getElementById('tx-transfer-amount').value);
+    if (isNaN(amount) || amount <= 0) return showError('请填写转账金额');
+    const toAccountId = document.getElementById('tx-to-account').value;
+    if (!toAccountId) return showError('请选择转入账户');
+    const toFundValue = document.getElementById('tx-to-fund').value;
+    if (!toFundValue) return showError('请选择转入基金');
+    const date = document.getElementById('tx-transfer-date').value || today;
+    const srcCash = vaultData.holdings.find(h => h.id === txSelection.holdingId);
+    if (!srcCash) return showError('现金持仓不存在');
+    if ((srcCash.shares || 0) + EPSILON < amount) return showError('现金不足');
+
+    srcCash.shares = roundMoney((srcCash.shares || 0) - amount);
+    if (toFundValue === '__new__') {
+      vaultData.holdings.push(makeCashHolding(toAccountId, amount, date));
+    } else {
+      const toHolding = vaultData.holdings.find(h => h.id === toFundValue);
+      if (!toHolding) return showError('转入基金不存在');
+      toHolding.shares = roundMoney((toHolding.shares || 0) + amount);
+    }
+    vaultData.transactions.push({ id: crypto.randomUUID(), accountId: txSelection.accountId, fundCode: '', fundName: '现金', type: 'transfer', price: null, shares: null, amount, date, toAccountId });
+  } else {
+    const type = document.getElementById('tx-type').value;
+    const price = parseFloat(document.getElementById('tx-price').value);
+    if (isNaN(price)) return showError('请填写价格');
+    const shares = parseFloat(document.getElementById('tx-shares').value);
+    if (isNaN(shares) || shares <= 0) return showError('请填写正确的交易份额');
+    const date = document.getElementById('tx-date').value || today;
+    const err = applyTransactionEffects({ accountId: txSelection.accountId, fundCode: txSelection.fundCode, fundName: txSelection.fundName, type, price, shares });
+    if (err) return showError(err);
+    vaultData.transactions.push({ id: crypto.randomUUID(), accountId: txSelection.accountId, fundCode: txSelection.fundCode, fundName: txSelection.fundName, type, price, amount: price * shares, shares, date });
+  }
+
   closeModal('modal-transaction');
   // Reset form
   document.getElementById('form-transaction').reset();
@@ -1251,7 +1369,9 @@ document.getElementById('btn-logout').addEventListener('click', handleLogout);
 
 document.getElementById('hold-account').addEventListener('change', checkHoldingUploadVisibility);
 document.getElementById('hold-product-type').addEventListener('change', checkHoldingUploadVisibility);
-document.getElementById('tx-account').addEventListener('change', checkTxUploadVisibility);
+document.getElementById('tx-to-account').addEventListener('change', function() {
+  populateToFundSelect(this.value);
+});
 
 // Auto-calculate amount when price or shares change
 document.getElementById('tx-price').addEventListener('input', () => calcTxAmount('tx-price', 'tx-shares', 'tx-amount'));
