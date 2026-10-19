@@ -16,3 +16,9 @@ Thumbs.db
 # IDE files
 .vscode/
 .idea/
+
+# Self-host data (encrypted vaults)
+data/
+
+# Runtime logs
+*.log

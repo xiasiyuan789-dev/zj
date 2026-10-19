@@ -157,7 +157,11 @@ async function api(action, body = null) {
   if (body) opts.body = JSON.stringify(body);
   const url = body ? `${API_BASE}?action=${action}` : `${API_BASE}?action=${action}&id=${vaultId}`;
   const res = await fetch(url, opts);
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) {
+    // 金库已在服务端被重建/清理时，旧页面的保存会 404，给出可操作的提示
+    if (res.status === 404 && action === 'save') throw new Error('登录状态已失效，请刷新页面后重新登录');
+    throw new Error(`API error: ${res.status}`);
+  }
   return res.json();
 }
 
