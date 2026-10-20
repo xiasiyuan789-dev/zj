@@ -38,6 +38,7 @@
     <div class="header">
       <h1>基金金库</h1>
       <div class="actions">
+        <button class="btn btn-primary btn-sm" id="btn-quick">⚡ 今日快录</button>
         <button class="btn btn-secondary btn-sm" onclick="openModal('modal-csv')">CSV 导入</button>
         <button class="btn btn-secondary btn-sm" id="btn-logout">退出</button>
       </div>
@@ -549,6 +550,28 @@
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" onclick="closeModal('modal-edit-transaction')">取消</button>
           <button type="submit" class="btn btn-primary">保存修改</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Quick Daily Entry -->
+  <div class="modal" id="modal-quick">
+    <div class="modal-content modal-content-wide">
+      <div class="quick-header">
+        <h2>⚡ 今日快录</h2>
+        <div class="quick-tools">
+          <input type="date" id="quick-date" aria-label="录入日期">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-quick-fetch">联网补全净值</button>
+        </div>
+      </div>
+      <div class="quick-fetch-status" id="quick-fetch-status"></div>
+      <div id="quick-list"></div>
+      <p class="quick-hint">留空 = 沿用当前值 · 输完按回车跳下一行 · 录「今天」会更新现价，改日期补录过去某天则只写当天趋势点、不影响当前净值。「联网补全」自动填入最新官方净值（仅支持有基金代码的场外基金），保存时会把漏掉的交易日趋势一并补上（最多回补90天）。</p>
+      <form id="form-quick">
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-quick')">取消</button>
+          <button type="submit" class="btn btn-primary" id="quick-submit">保存</button>
         </div>
       </form>
     </div>

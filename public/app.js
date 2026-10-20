@@ -214,40 +214,48 @@ async function handleAuth(e) {
 }
 
 // --- Snapshot ---
-function captureSnapshot() {
-  if (!vaultData || !vaultData.holdings || vaultData.holdings.length === 0) return;
-  const today = new Date().toISOString().split('T')[0];
-  const { accounts, holdings, transactions } = vaultData;
-
+function buildSnapshot(dateStr, navOverrides) {
+  const { accounts, holdings } = vaultData;
   let totalValue = 0, totalCost = 0;
   const items = holdings.map(h => {
     const shares = h.shares || 0;
-    const value = shares * (h.currentNav || 0);
+    const nav = navOverrides && navOverrides.has(h.id) ? navOverrides.get(h.id) : (h.currentNav || 0);
+    const value = shares * nav;
     const costPerShare = h.costPerShare || 0;
     const cost = shares * costPerShare;
     totalValue += value;
     totalCost += cost;
     const acc = accounts.find(a => a.id === h.accountId);
-    return { accountId: h.accountId, accountName: acc?.name || '未知', productType: h.productType || '', fundName: h.fundName, shares: shares, costPerShare: costPerShare, currentNav: h.currentNav };
+    return { accountId: h.accountId, accountName: acc?.name || '未知', productType: h.productType || '', fundName: h.fundName, shares: shares, costPerShare: costPerShare, currentNav: nav };
   });
+  return { date: dateStr, totalValue, totalCost, holdings: items };
+}
 
-  const snapshot = { date: today, totalValue, totalCost, holdings: items };
-  const existingIdx = vaultData.snapshots.findIndex(s => s.date === today);
-  if (existingIdx >= 0) {
-    vaultData.snapshots[existingIdx] = snapshot;
-  } else {
-    vaultData.snapshots.push(snapshot);
-  }
+function upsertSnapshot(snapshot) {
+  const idx = vaultData.snapshots.findIndex(s => s.date === snapshot.date);
+  if (idx >= 0) vaultData.snapshots[idx] = snapshot;
+  else vaultData.snapshots.push(snapshot);
+}
+
+function captureSnapshot(dateStr) {
+  if (!vaultData || !vaultData.holdings || vaultData.holdings.length === 0) return;
+  const date = dateStr || new Date().toISOString().split('T')[0];
+  upsertSnapshot(buildSnapshot(date, null));
 }
 
 // --- Save ---
-async function saveVault() {
+async function persistVault() {
   if (!vaultData || !currentPassword) return;
-  captureSnapshot();
   const plaintext = JSON.stringify(vaultData);
   const encrypted = await encrypt(plaintext, currentPassword);
   const result = await api('save', { id: vaultId, encryptedData: encrypted });
   if (result.error) throw new Error(result.error);
+}
+
+async function saveVault() {
+  if (!vaultData || !currentPassword) return;
+  captureSnapshot();
+  await persistVault();
 }
 
 // --- Render ---
@@ -1354,6 +1362,217 @@ function handleCsvImport(e) {
   reader.readAsText(file, 'UTF-8');
 }
 
+// --- Quick Daily Entry (今日快录) ---
+let quickNavSeries = new Map(); // fundCode -> Map(dateStr -> nav)
+
+function openQuickEntry() {
+  if (!vaultData) return;
+  quickNavSeries = new Map();
+  document.getElementById('quick-fetch-status').textContent = '';
+  const dateInput = document.getElementById('quick-date');
+  const today = new Date().toISOString().split('T')[0];
+  dateInput.value = today;
+  dateInput.max = today;
+  renderQuickList();
+  openModal('modal-quick');
+}
+
+function renderQuickList() {
+  const container = document.getElementById('quick-list');
+  const { accounts, holdings } = vaultData;
+  const investHoldings = holdings.filter(h => h.productType !== '现金');
+  if (investHoldings.length === 0) {
+    container.innerHTML = '<div class="empty-state">暂无非现金持仓，请先在「持仓明细」添加基金</div>';
+    return;
+  }
+  container.innerHTML = accounts.map(acc => {
+    const rows = investHoldings.filter(h => h.accountId === acc.id);
+    if (rows.length === 0) return '';
+    return `
+      <div class="quick-group">
+        <div class="quick-group-title">${esc(acc.name)}</div>
+        ${rows.map(h => `
+          <div class="quick-row" data-id="${h.id}">
+            <div class="quick-fund">
+              <span class="quick-fund-name">${esc(h.fundName || '未命名')}${h.fundCode ? ` <span class="quick-fund-code">${esc(h.fundCode)}</span>` : ''}</span>
+              <span class="quick-delta" id="quick-delta-${h.id}"></span>
+            </div>
+            <div class="quick-inputs">
+              <label>成本<input type="number" step="0.0001" inputmode="decimal" data-id="${h.id}" data-field="cost" placeholder="${h.costPerShare ?? '—'}"></label>
+              <label>现价<input type="number" step="0.0001" inputmode="decimal" data-id="${h.id}" data-field="nav" placeholder="${h.currentNav ?? '—'}"></label>
+            </div>
+          </div>`).join('')}
+      </div>`;
+  }).join('');
+}
+
+function updateQuickDelta(input) {
+  const row = input.closest('.quick-row');
+  if (!row) return;
+  const id = row.dataset.id;
+  const h = (vaultData?.holdings || []).find(x => x.id === id);
+  const el = document.getElementById('quick-delta-' + id);
+  if (!h || !el) return;
+  const navInput = row.querySelector('[data-field="nav"]');
+  const v = parseFloat(navInput.value);
+  if (!navInput.value || isNaN(v) || !h.currentNav) { el.textContent = ''; return; }
+  const pct = (v - h.currentNav) / h.currentNav * 100;
+  const money = (h.shares || 0) * (v - h.currentNav);
+  el.textContent = `${pct >= 0 ? '↗ +' : '↘ '}${pct.toFixed(2)}%  ${money >= 0 ? '+' : ''}¥${money.toFixed(2)}`;
+  el.className = 'quick-delta ' + (pct >= 0 ? 'positive' : 'negative');
+}
+
+async function handleQuickSave(e) {
+  e.preventDefault();
+  if (!vaultData) return;
+  const btn = document.getElementById('quick-submit');
+  const dateStr = document.getElementById('quick-date').value || new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().split('T')[0];
+  const isPast = dateStr < today; // 补录过去：只写历史趋势点，不改当前现价
+  btn.disabled = true;
+  btn.textContent = '保存中...';
+  try {
+    let changed = 0;
+    const navOverrides = new Map();
+    document.querySelectorAll('#quick-list input[data-field]').forEach(input => {
+      if (input.value === '') return;
+      const v = parseFloat(input.value);
+      if (isNaN(v) || v < 0) return;
+      const h = vaultData.holdings.find(x => x.id === input.dataset.id);
+      if (!h) return;
+      if (input.dataset.field === 'cost') {
+        h.costPerShare = v;
+      } else if (isPast) {
+        navOverrides.set(h.id, v);
+      } else {
+        h.currentNav = v;
+      }
+      changed++;
+    });
+    if (changed > 0) {
+      backfillSnapshots(dateStr); // 先补历史缺口，再写所选日期当天的快照
+      upsertSnapshot(buildSnapshot(dateStr, isPast ? navOverrides : null));
+      await persistVault();
+      renderDashboard();
+    }
+    closeModal('modal-quick');
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '保存';
+  }
+}
+
+// 用已拉取的净值序列，把「上次快照之后 ~ 所选日期」之间缺失的交易日快照补上。
+// 历史快照按当前份额近似计算（若期间有过交易，最早的原快照不受影响）。
+function backfillSnapshots(uptoDate) {
+  const snaps = vaultData.snapshots || [];
+  const earlierDates = snaps.filter(s => s.date <= uptoDate).map(s => s.date).sort();
+  const anchor = earlierDates.length ? earlierDates[earlierDates.length - 1] : null;
+  if (!anchor) return; // 没有更早的快照作锚点，不回补
+  const min = new Date(uptoDate + 'T00:00:00Z');
+  min.setUTCDate(min.getUTCDate() - 90);
+  const minDate = min.toISOString().split('T')[0];
+  const from = anchor > minDate ? anchor : minDate;
+
+  const tradingDays = new Set();
+  quickNavSeries.forEach(series => {
+    series.forEach((nav, d) => { if (d > from && d <= uptoDate) tradingDays.add(d); });
+  });
+  if (tradingDays.size === 0) return;
+
+  const existing = new Set(snaps.map(s => s.date));
+  const { accounts, holdings } = vaultData;
+  [...tradingDays].sort().forEach(d => {
+    if (existing.has(d)) return;
+    let totalValue = 0, totalCost = 0;
+    const items = holdings.map(h => {
+      const shares = h.shares || 0;
+      let nav = h.currentNav || 0;
+      const series = quickNavSeries.get(h.fundCode);
+      if (series && series.has(d)) nav = series.get(d);
+      totalValue += shares * nav;
+      totalCost += shares * (h.costPerShare || 0);
+      const acc = accounts.find(a => a.id === h.accountId);
+      return { accountId: h.accountId, accountName: acc?.name || '未知', productType: h.productType || '', fundName: h.fundName, shares, costPerShare: h.costPerShare || 0, currentNav: nav };
+    });
+    snaps.push({ date: d, totalValue, totalCost, holdings: items });
+    existing.add(d);
+  });
+  vaultData.snapshots.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// 从天天基金公开数据加载净值序列（script 注入绕过跨域，不涉及 CORS 配置）
+function fetchNavSeries(code) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    const timer = setTimeout(() => { cleanup(); reject(new Error('timeout')); }, 10000);
+    function cleanup() {
+      clearTimeout(timer);
+      script.remove();
+      try { delete window.Data_netWorthTrend; } catch { window.Data_netWorthTrend = undefined; }
+    }
+    script.src = `https://fund.eastmoney.com/pingzhongdata/${code}.js`;
+    script.onload = () => {
+      try {
+        const trend = window.Data_netWorthTrend;
+        if (!Array.isArray(trend) || trend.length === 0) throw new Error('no data');
+        const series = new Map();
+        trend.slice(-200).forEach(p => {
+          // p.x 为 UTC 毫秒时间戳，按东八区日历日归档
+          const d = new Date(p.x + 8 * 3600 * 1000).toISOString().split('T')[0];
+          series.set(d, p.y);
+        });
+        cleanup();
+        resolve(series);
+      } catch (err) {
+        cleanup();
+        reject(err);
+      }
+    };
+    script.onerror = () => { cleanup(); reject(new Error('load failed')); };
+    document.head.appendChild(script);
+  });
+}
+
+async function handleQuickFetch() {
+  const btn = document.getElementById('btn-quick-fetch');
+  const status = document.getElementById('quick-fetch-status');
+  const candidates = (vaultData?.holdings || []).filter(h => h.productType !== '现金' && h.fundCode);
+  const noCode = (vaultData?.holdings || []).filter(h => h.productType !== '现金' && !h.fundCode).length;
+  if (candidates.length === 0) {
+    status.textContent = '没有带基金代码的持仓，请手动填写现价';
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = '补全中...';
+  status.textContent = '正在从天天基金拉取净值...';
+  const codes = [...new Set(candidates.map(h => h.fundCode))];
+  let ok = 0, fail = 0;
+  for (const code of codes) {
+    try {
+      const series = await fetchNavSeries(code);
+      quickNavSeries.set(code, series);
+      let lastNav = null;
+      series.forEach(v => { lastNav = v; });
+      candidates.filter(h => h.fundCode === code).forEach(h => {
+        const input = document.querySelector(`#quick-list input[data-id="${h.id}"][data-field="nav"]`);
+        if (input && lastNav != null) {
+          input.value = lastNav;
+          updateQuickDelta(input);
+        }
+      });
+      ok++;
+    } catch {
+      fail++;
+    }
+  }
+  status.textContent = `补全完成：成功 ${ok} 只${fail ? `，失败 ${fail} 只（代码不存在或网络受限）` : ''}${noCode ? `，另有 ${noCode} 只无基金代码需手动填` : ''}。已填入最新官方净值，请核对后保存。`;
+  btn.disabled = false;
+  btn.textContent = '联网补全净值';
+}
+
 function handleLogout() {
   vaultData = null; currentPassword = null; vaultId = null;
   document.getElementById('dashboard').style.display = 'none';
@@ -1370,6 +1589,23 @@ document.getElementById('form-transaction').addEventListener('submit', handleAdd
 document.getElementById('form-edit-transaction').addEventListener('submit', handleEditTransaction);
 document.getElementById('form-csv').addEventListener('submit', handleCsvImport);
 document.getElementById('btn-logout').addEventListener('click', handleLogout);
+document.getElementById('btn-quick').addEventListener('click', openQuickEntry);
+document.getElementById('form-quick').addEventListener('submit', handleQuickSave);
+document.getElementById('btn-quick-fetch').addEventListener('click', handleQuickFetch);
+
+// 快录列表：实时涨跌显示 + 回车跳下一行（最后一行回车=提交）
+const quickListEl = document.getElementById('quick-list');
+quickListEl.addEventListener('input', e => {
+  if (e.target.matches('input[data-field]')) updateQuickDelta(e.target);
+});
+quickListEl.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || !e.target.matches('input[data-field]')) return;
+  e.preventDefault();
+  const inputs = [...quickListEl.querySelectorAll('input[data-field]')];
+  const idx = inputs.indexOf(e.target);
+  if (idx >= 0 && idx < inputs.length - 1) inputs[idx + 1].focus();
+  else document.getElementById('form-quick').requestSubmit();
+});
 
 document.getElementById('hold-account').addEventListener('change', checkHoldingUploadVisibility);
 document.getElementById('hold-product-type').addEventListener('change', checkHoldingUploadVisibility);
