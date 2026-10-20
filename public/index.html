@@ -161,6 +161,25 @@
     </div>
   </div>
 
+    <!-- Journal: 投资警示录 -->
+    <div class="section">
+      <div class="section-header">
+        <h2>投资警示录</h2>
+      </div>
+      <form id="form-journal" class="journal-form">
+        <div class="journal-form-row">
+          <select id="journal-type">
+            <option value="心得">💡 心得</option>
+            <option value="警示">⚠️ 警示</option>
+          </select>
+          <input type="date" id="journal-date">
+          <button type="submit" class="btn btn-primary btn-sm">记一笔</button>
+        </div>
+        <textarea id="journal-text" rows="3" placeholder="写下这笔投资的心得或教训：为什么买/卖？错在哪里？下次怎么办？"></textarea>
+      </form>
+      <div id="journal-list"></div>
+    </div>
+
   <!-- Modal: Add Account -->
   <div class="modal" id="modal-account">
     <div class="modal-content">
@@ -567,7 +586,7 @@
       </div>
       <div class="quick-fetch-status" id="quick-fetch-status"></div>
       <div id="quick-list"></div>
-      <p class="quick-hint">留空 = 沿用当前值 · 输完按回车跳下一行 · 录「今天」会更新现价，改日期补录过去某天则只写当天趋势点、不影响当前净值。「联网补全」自动填入最新官方净值（仅支持有基金代码的场外基金），保存时会把漏掉的交易日趋势一并补上（最多回补90天）。</p>
+      <p class="quick-hint">留空 = 沿用当前值 · 输完按回车跳下一行 · 份额与成本是当前持仓事实、填了即生效；现价录「今天」会更新现价，改日期补录过去某天则只写当天趋势点、不影响当前净值。「联网补全」自动填入最新官方净值（仅支持有基金代码的场外基金），保存时会把漏掉的交易日趋势一并补上（最多回补90天）。</p>
       <form id="form-quick">
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" onclick="closeModal('modal-quick')">取消</button>

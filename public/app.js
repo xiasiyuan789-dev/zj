@@ -183,7 +183,7 @@ async function handleAuth(e) {
   try {
     const pwHash = await hashPassword(password);
     if (isRegister) {
-      const emptyVault = JSON.stringify({ accounts: [], holdings: [], transactions: [], snapshots: [] });
+      const emptyVault = JSON.stringify({ accounts: [], holdings: [], transactions: [], snapshots: [], journal: [] });
       const encrypted = await encrypt(emptyVault, password);
       const result = await api('register', { passwordHash: pwHash, encryptedData: encrypted });
       if (result.error) throw new Error(result.error);
@@ -199,6 +199,7 @@ async function handleAuth(e) {
         vaultData = JSON.parse(decrypted);
         // Data migration: add snapshots array for old vaults
         if (!vaultData.snapshots) vaultData.snapshots = [];
+        if (!vaultData.journal) vaultData.journal = [];
         currentPassword = password;
       } catch {
         throw new Error('密码错误');
@@ -277,6 +278,7 @@ function showDashboard() {
 
 function renderDashboard() {
   const { accounts, holdings, transactions } = vaultData;
+  document.getElementById('journal-date').value = new Date().toISOString().split('T')[0];
   let totalAssets = 0, totalCost = 0, cashTotal = 0, investTotal = 0;
 
   holdings.forEach(h => {
@@ -309,6 +311,7 @@ function renderDashboard() {
   renderTransactions(transactions, accounts);
   renderTrendChart();
   renderHistory();
+  renderJournal();
 }
 
 function renderAccounts(accounts, holdings, transactions) {
@@ -1398,6 +1401,7 @@ function renderQuickList() {
               <span class="quick-delta" id="quick-delta-${h.id}"></span>
             </div>
             <div class="quick-inputs">
+              <label>份额<input type="number" step="0.01" inputmode="decimal" data-id="${h.id}" data-field="shares" placeholder="${h.shares ?? '—'}"></label>
               <label>成本<input type="number" step="0.0001" inputmode="decimal" data-id="${h.id}" data-field="cost" placeholder="${h.costPerShare ?? '—'}"></label>
               <label>现价<input type="number" step="0.0001" inputmode="decimal" data-id="${h.id}" data-field="nav" placeholder="${h.currentNav ?? '—'}"></label>
             </div>
@@ -1442,6 +1446,8 @@ async function handleQuickSave(e) {
       if (!h) return;
       if (input.dataset.field === 'cost') {
         h.costPerShare = v;
+      } else if (input.dataset.field === 'shares') {
+        h.shares = v; // 份额是当前持仓事实，无论补录哪天都直接生效
       } else if (isPast) {
         navOverrides.set(h.id, v);
       } else {
@@ -1573,6 +1579,53 @@ async function handleQuickFetch() {
   btn.textContent = '联网补全净值';
 }
 
+// --- Journal: 投资警示录 ---
+function renderJournal() {
+  const list = document.getElementById('journal-list');
+  const entries = [...(vaultData?.journal || [])].sort((a, b) =>
+    b.date.localeCompare(a.date) || (b.createdAt || '').localeCompare(a.createdAt || ''));
+  if (entries.length === 0) {
+    list.innerHTML = '<div class="empty-state">还没有记录。市场给你的每个教训，都值得记下来。</div>';
+    return;
+  }
+  list.innerHTML = entries.map(en => `
+    <div class="journal-item ${en.type === '警示' ? 'journal-warn' : 'journal-note'}">
+      <div class="journal-meta">
+        <span class="journal-badge">${en.type === '警示' ? '⚠️ 警示' : '💡 心得'}</span>
+        <span class="journal-date">${esc(en.date)}</span>
+        <button class="btn-icon" onclick="deleteJournal('${en.id}')" title="删除">×</button>
+      </div>
+      <div class="journal-text">${esc(en.text)}</div>
+    </div>`).join('');
+}
+
+async function handleAddJournal(e) {
+  e.preventDefault();
+  if (!vaultData) return;
+  const text = document.getElementById('journal-text').value.trim();
+  if (!text) return showError('写点内容再记吧');
+  vaultData.journal.push({
+    id: crypto.randomUUID(),
+    type: document.getElementById('journal-type').value,
+    date: document.getElementById('journal-date').value || new Date().toISOString().split('T')[0],
+    text,
+    createdAt: new Date().toISOString(),
+  });
+  document.getElementById('journal-text').value = '';
+  try {
+    await persistVault();
+    renderJournal();
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+window.deleteJournal = async function(id) {
+  if (!confirm('删除这条记录？')) return;
+  vaultData.journal = (vaultData.journal || []).filter(j => j.id !== id);
+  try { await persistVault(); renderJournal(); } catch (err) { showError(err.message); }
+};
+
 function handleLogout() {
   vaultData = null; currentPassword = null; vaultId = null;
   document.getElementById('dashboard').style.display = 'none';
@@ -1592,6 +1645,7 @@ document.getElementById('btn-logout').addEventListener('click', handleLogout);
 document.getElementById('btn-quick').addEventListener('click', openQuickEntry);
 document.getElementById('form-quick').addEventListener('submit', handleQuickSave);
 document.getElementById('btn-quick-fetch').addEventListener('click', handleQuickFetch);
+document.getElementById('form-journal').addEventListener('submit', handleAddJournal);
 
 // 快录列表：实时涨跌显示 + 回车跳下一行（最后一行回车=提交）
 const quickListEl = document.getElementById('quick-list');
