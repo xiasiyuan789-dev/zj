@@ -866,3 +866,5 @@ th {
 .journal-note .journal-badge { color: var(--primary); }
 .journal-date { font-size: 12px; color: var(--text-muted); flex: 1; }
 .journal-text { font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+
+.stat-sub { font-size: 11px; margin-top: 4px; opacity: 0.85; }

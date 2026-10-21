@@ -276,6 +276,30 @@ function showDashboard() {
   renderDashboard();
 }
 
+// 已实现盈亏：按平均成本法回放全部买卖记录（分红/转账不参与）
+function computeRealizedPnl() {
+  const groups = new Map(); // accountId|fund -> { shares, cost }
+  (vaultData?.transactions || []).forEach(t => {
+    if (t.type !== 'buy' && t.type !== 'sell') return;
+    const key = `${t.accountId}|${t.fundCode || t.fundName || ''}`;
+    if (!groups.has(key)) groups.set(key, { shares: 0, cost: 0 });
+    const g = groups.get(key);
+    if (t.type === 'buy') {
+      g.shares += (t.shares || 0);
+      g.cost += (t.amount != null ? t.amount : (t.price || 0) * (t.shares || 0));
+    } else if (g.shares > EPSILON) {
+      const avg = g.cost / g.shares;
+      const sold = Math.min(t.shares || 0, g.shares);
+      g.realized = (g.realized || 0) + ((t.price || 0) - avg) * sold;
+      g.shares -= sold;
+      g.cost = g.shares * avg;
+    }
+  });
+  let realized = 0;
+  groups.forEach(g => { realized += g.realized || 0; });
+  return realized;
+}
+
 function renderDashboard() {
   const { accounts, holdings, transactions } = vaultData;
   document.getElementById('journal-date').value = new Date().toISOString().split('T')[0];
@@ -294,14 +318,25 @@ function renderDashboard() {
     }
   });
 
-  const totalPnl = totalAssets - totalCost;
-  const totalPnlRate = totalCost > 0 ? (totalPnl / totalCost * 100).toFixed(2) : '0.00';
+  // 总收益 = 浮动盈亏（当前持仓）+ 已实现盈亏（历史卖出落袋）
+  const realized = computeRealizedPnl();
+  const floatingPnl = totalAssets - totalCost;
+  const totalPnl = floatingPnl + realized;
+  // 收益率分母用原始投入（当前成本中含卖出盈利转存的现金，剔除已实现部分）
+  const invested = totalCost - realized;
+  const rateBase = invested > 0 ? invested : totalCost;
+  const totalPnlRate = rateBase > 0 ? (totalPnl / rateBase * 100).toFixed(2) : '0.00';
 
   document.getElementById('total-assets').textContent = `¥${totalAssets.toFixed(2)}`;
   document.getElementById('total-pnl').textContent = `${totalPnl >= 0 ? '+' : ''}¥${totalPnl.toFixed(2)}`;
   document.getElementById('total-pnl').className = totalPnl >= 0 ? 'positive' : 'negative';
   document.getElementById('total-pnl-rate').textContent = `${totalPnl >= 0 ? '+' : ''}${totalPnlRate}%`;
   document.getElementById('total-pnl-rate').className = totalPnl >= 0 ? 'positive' : 'negative';
+  const splitEl = document.getElementById('pnl-split');
+  if (splitEl) {
+    splitEl.textContent = `已实现 ${realized >= 0 ? '+' : ''}¥${realized.toFixed(2)} · 浮动 ${floatingPnl >= 0 ? '+' : ''}¥${floatingPnl.toFixed(2)}`;
+    splitEl.className = 'stat-sub ' + (totalPnl >= 0 ? 'positive' : 'negative');
+  }
   document.getElementById('account-count').textContent = accounts.length;
   document.getElementById('cash-total').textContent = `¥${cashTotal.toFixed(2)}`;
   document.getElementById('invest-total').textContent = `¥${investTotal.toFixed(2)}`;
