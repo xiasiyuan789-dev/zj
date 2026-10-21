@@ -276,8 +276,15 @@ function showDashboard() {
   renderDashboard();
 }
 
-// 已实现盈亏：按平均成本法回放全部买卖记录（分红/转账不参与）
+// 已实现盈亏：按平均成本法回放全部买卖记录（分红/转账不参与）。
+// 卖出时若交易历史里没有买入记录（如手动录入的持仓），退回用持仓上录的成本净值计算。
 function computeRealizedPnl() {
+  const holdingCost = new Map(); // accountId|代码或名称 -> 成本净值（兜底用）
+  (vaultData?.holdings || []).forEach(h => {
+    if (h.productType === '现金') return;
+    if (h.fundCode) holdingCost.set(`${h.accountId}|${h.fundCode}`, h.costPerShare || 0);
+    if (h.fundName) holdingCost.set(`${h.accountId}|${h.fundName}`, h.costPerShare || 0);
+  });
   const groups = new Map(); // accountId|fund -> { shares, cost }
   (vaultData?.transactions || []).forEach(t => {
     if (t.type !== 'buy' && t.type !== 'sell') return;
@@ -287,12 +294,21 @@ function computeRealizedPnl() {
     if (t.type === 'buy') {
       g.shares += (t.shares || 0);
       g.cost += (t.amount != null ? t.amount : (t.price || 0) * (t.shares || 0));
-    } else if (g.shares > EPSILON) {
-      const avg = g.cost / g.shares;
-      const sold = Math.min(t.shares || 0, g.shares);
+    } else {
+      let avg;
+      if (g.shares > EPSILON) {
+        avg = g.cost / g.shares;
+      } else {
+        const hc = holdingCost.get(key);
+        if (hc == null) return; // 既无买入记录也无持仓成本，无法确定成本，不计入
+        avg = hc;
+      }
+      const sold = g.shares > EPSILON ? Math.min(t.shares || 0, g.shares) : (t.shares || 0);
       g.realized = (g.realized || 0) + ((t.price || 0) - avg) * sold;
-      g.shares -= sold;
-      g.cost = g.shares * avg;
+      if (g.shares > EPSILON) {
+        g.shares -= sold;
+        g.cost = g.shares * avg;
+      }
     }
   });
   let realized = 0;
