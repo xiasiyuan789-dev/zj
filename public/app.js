@@ -345,7 +345,7 @@ function renderAccounts(accounts, holdings, transactions) {
 function renderHoldings(holdings, accounts) {
   const tbody = document.getElementById('holdings-tbody');
   if (holdings.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">暂无持仓数据</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">暂无持仓数据</td></tr>';
     return;
   }
   const transactions = vaultData?.transactions || [];
@@ -368,7 +368,7 @@ function renderHoldings(holdings, accounts) {
           <td>${esc(acc?.name || '未知')}</td>
           <td><span class="product-type-tag cash-tag">${esc(h.productType)}</span></td>
           <td>${esc(name)}</td>
-          <td colspan="3" class="cash-amount-cell">¥${marketValue.toFixed(2)}</td>
+          <td colspan="4" class="cash-amount-cell">¥${marketValue.toFixed(2)}</td>
           <td>-</td>
           <td>${h.date || '-'}</td>
           <td><button class="btn-edit" onclick="editHolding('${h.id}')">编辑</button></td>
@@ -384,6 +384,7 @@ function renderHoldings(holdings, accounts) {
         <td>${sharesLabel}</td>
         <td>${costLabel}</td>
         <td>${(h.currentNav || 0).toFixed(4)}</td>
+        <td>¥${marketValue.toFixed(2)}</td>
         <td class="${pnl >= 0 ? 'positive' : 'negative'}">
           ${pnl >= 0 ? '+' : ''}¥${pnl.toFixed(2)} (${pnl >= 0 ? '+' : ''}${pnlRate}%)
         </td>
@@ -1453,6 +1454,7 @@ async function handleQuickSave(e) {
       } else {
         h.currentNav = v;
       }
+      if (!isPast) h.date = dateStr; // 录今天：持仓日期同步为本次数据更新日期
       changed++;
     });
     if (changed > 0) {
