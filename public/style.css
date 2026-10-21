@@ -868,3 +868,21 @@ th {
 .journal-text { font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
 
 .stat-sub { font-size: 11px; margin-top: 4px; opacity: 0.85; }
+
+/* --- 持仓账户筛选标签 --- */
+.filter-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.filter-chip {
+  padding: 4px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+}
+.filter-chip.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}

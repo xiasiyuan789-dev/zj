@@ -377,14 +377,30 @@ function renderAccounts(accounts, holdings, transactions) {
   }).join('');
 }
 
+// --- 持仓明细账户筛选 ---
+let holdingFilter = ''; // '' = 全部账户
+
+function renderHoldingFilter(accounts, holdings) {
+  const el = document.getElementById('holding-filter');
+  if (!el) return;
+  const accsWithHoldings = accounts.filter(a => holdings.some(h => h.accountId === a.id));
+  if (holdingFilter && !accsWithHoldings.some(a => a.id === holdingFilter)) holdingFilter = '';
+  const chips = [{ id: '', name: '全部' }, ...accsWithHoldings.map(a => ({ id: a.id, name: a.name }))];
+  el.innerHTML = chips.map(c =>
+    `<button type="button" class="filter-chip ${holdingFilter === c.id ? 'active' : ''}" data-acc="${c.id}">${esc(c.name)}</button>`
+  ).join('');
+}
+
 function renderHoldings(holdings, accounts) {
+  renderHoldingFilter(accounts, holdings);
   const tbody = document.getElementById('holdings-tbody');
-  if (holdings.length === 0) {
+  const visible = holdingFilter ? holdings.filter(h => h.accountId === holdingFilter) : holdings;
+  if (visible.length === 0) {
     tbody.innerHTML = '<tr><td colspan="10" class="empty-state">暂无持仓数据</td></tr>';
     return;
   }
   const transactions = vaultData?.transactions || [];
-  tbody.innerHTML = holdings.map(h => {
+  tbody.innerHTML = visible.map(h => {
     const acc = accounts.find(a => a.id === h.accountId);
     const isCash = h.productType === '现金';
     const marketValue = (h.shares || 0) * (h.currentNav || 0);
@@ -1683,6 +1699,12 @@ document.getElementById('btn-quick').addEventListener('click', openQuickEntry);
 document.getElementById('form-quick').addEventListener('submit', handleQuickSave);
 document.getElementById('btn-quick-fetch').addEventListener('click', handleQuickFetch);
 document.getElementById('form-journal').addEventListener('submit', handleAddJournal);
+document.getElementById('holding-filter').addEventListener('click', e => {
+  const chip = e.target.closest('.filter-chip');
+  if (!chip) return;
+  holdingFilter = chip.dataset.acc;
+  renderHoldings(vaultData.holdings, vaultData.accounts);
+});
 
 // 快录列表：实时涨跌显示 + 回车跳下一行（最后一行回车=提交）
 const quickListEl = document.getElementById('quick-list');
