@@ -4,6 +4,8 @@
 
 ## 工作原则（必须遵守）
 
+0. **正式环境强制使用 CloudBase**：所有对用户发布/上线的版本，必须且只能通过下述「正式环境发布（CloudBase 云端版）」流程部署。禁止将 `server.mjs` 自托管（本地文件模式或 Supabase 模式）作为正式环境发布或让用户当成正式环境使用；`server.mjs` 与 `scripts/mock-server.mjs` 只能用于本地开发自测。用户金库数据只存于 CloudBase 的 PostgreSQL（vaults 表），任何改动不得迁移、复制或清空该库。
+
 1. **自测闭环**：所有功能修改完成后，必须自己测试，测试发现问题自己修复并复测，直到功能正常才能提交推送。
    - 本地测试方法：运行 `node server.mjs`（自托管后端，加密数据存于 `./data`，默认端口 8787），浏览器访问 `http://localhost:8787` 端到端验证受影响的功能。
    - 备选：`node scripts/mock-server.mjs` 为纯内存 mock（不落盘），适合临时验证；注意与 server.mjs 端口相同，不要同时运行。
@@ -19,7 +21,7 @@
 4. 未经验收和用户确认，不得推送。用户如明确说「免验收直接推」，可跳过验收但仍需打标签。
 5. 回退方法：在部署机上 `git fetch --tags && git checkout vX.Y.Z` 后刷新页面即可回到该版本（数据在 `data/` 目录，不受代码回退影响）。
 
-## 正式环境发布（CloudBase 云端版）
+## 正式环境发布（强制走 CloudBase，唯一发布渠道）
 
 正式环境是腾讯 CloudBase：https://xsy-db-d7g6fmldu0e8c5967-1513045239.tcloudbaseapp.com
 （环境 ID `xsy-db-d7g6fmldu0e8c5967`，静态托管 + 云函数 vault-app + PostgreSQL vaults 表；用户金库数据在该数据库中）
