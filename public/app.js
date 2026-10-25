@@ -447,7 +447,11 @@ function renderHoldingFilter(accounts, holdings) {
 function renderHoldings(holdings, accounts) {
   renderHoldingFilter(accounts, holdings);
   const sortIcon = document.getElementById('th-sort-icon');
-  if (sortIcon) sortIcon.textContent = holdingSort === 'desc' ? '▼' : holdingSort === 'asc' ? '▲' : '';
+  if (sortIcon) {
+    if (holdingSort === 'desc') { sortIcon.textContent = '▼'; sortIcon.classList.add('active'); }
+    else if (holdingSort === 'asc') { sortIcon.textContent = '▲'; sortIcon.classList.add('active'); }
+    else { sortIcon.textContent = '⇅'; sortIcon.classList.remove('active'); }
+  }
   let visible = holdingFilter ? holdings.filter(h => h.accountId === holdingFilter) : [...holdings];
   if (holdingSort) {
     visible.sort((a, b) => {
