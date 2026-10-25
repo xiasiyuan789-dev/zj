@@ -409,7 +409,7 @@ function renderDashboard() {
 function renderAccounts(accounts, holdings, transactions) {
   const container = document.getElementById('accounts-list');
   if (accounts.length === 0) {
-    container.innerHTML = '<div class="empty-state">暂无账户，请添加基金账户</div>';
+    container.innerHTML = '<div class="empty-state">暂无账户，请添加资金账户</div>';
     return;
   }
   container.innerHTML = accounts.map(acc => {
@@ -970,7 +970,7 @@ function handleEditHolding(e) {
     let shares = parseFloat(document.getElementById('edit-holding-shares').value);
     let costPerShare = parseFloat(document.getElementById('edit-holding-cost').value);
     let currentNav = parseFloat(document.getElementById('edit-holding-nav').value);
-    if (!fundName) return showError('请填写基金名称');
+    if (!fundName) return showError('请填写产品名称');
 
     // If shares or cost not provided, try to calculate from transactions
     if (isNaN(shares) || isNaN(costPerShare)) {
@@ -1072,7 +1072,7 @@ function renderTxFundPicker() {
   const accounts = vaultData?.accounts || [];
   const holdings = vaultData?.holdings || [];
   if (accounts.length === 0) {
-    container.innerHTML = '<div class="picker-empty">暂无账户，请先添加基金账户和持仓</div>';
+    container.innerHTML = '<div class="picker-empty">暂无账户，请先添加资金账户和持仓</div>';
     return;
   }
   container.innerHTML = accounts.map(acc => {
@@ -1398,7 +1398,7 @@ function handleOCRConfirm(e) {
       } else {
         const fundCode = document.getElementById('ocr-code').value.trim();
         const fundName = document.getElementById('ocr-name').value.trim();
-        if (!fundName) return showError('请填写基金名称');
+        if (!fundName) return showError('请填写产品名称');
         let shares = parseFloat(document.getElementById('ocr-shares').value);
         let costPerShare = parseFloat(document.getElementById('ocr-cost').value);
         let currentNav = parseFloat(document.getElementById('ocr-nav').value);

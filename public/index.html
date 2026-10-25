@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>基金金库 - 资产管理</title>
+  <title>藏金阁 - 资产管理</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -36,7 +36,7 @@
   <!-- Dashboard -->
   <div id="dashboard">
     <div class="header">
-      <h1>基金金库</h1>
+      <h1>藏金阁</h1>
       <div class="actions">
         <button class="btn btn-primary btn-sm" id="btn-quick">⚡ 今日快录</button>
         <button class="btn btn-secondary btn-sm" onclick="openModal('modal-csv')">CSV 导入</button>
@@ -108,7 +108,7 @@
     <!-- Accounts -->
     <div class="section">
       <div class="section-header">
-        <h2>基金账户</h2>
+        <h2>资金账户</h2>
         <button class="btn btn-primary btn-sm" onclick="openModal('modal-account')">+ 添加账户</button>
       </div>
       <div id="accounts-list"></div>
@@ -127,7 +127,7 @@
             <tr>
               <th>账户</th>
               <th>产品类型</th>
-              <th>基金名称</th>
+              <th>产品名称</th>
               <th>份额</th>
               <th>成本净值</th>
               <th>最新净值</th>
@@ -154,7 +154,7 @@
             <tr>
               <th>日期</th>
               <th>账户</th>
-              <th>基金名称</th>
+              <th>产品名称</th>
               <th>类型</th>
               <th>价格</th>
               <th>份额</th>
@@ -198,7 +198,7 @@
   <!-- Modal: Add Account -->
   <div class="modal" id="modal-account">
     <div class="modal-content">
-      <h2>添加基金账户</h2>
+      <h2>添加资金账户</h2>
       <form id="form-account">
         <div class="form-group">
           <label>账户名称</label>
@@ -262,7 +262,7 @@
             <input type="text" id="edit-holding-code" placeholder="如：000001">
           </div>
           <div class="form-group">
-            <label>基金名称</label>
+            <label>产品名称</label>
             <input type="text" id="edit-holding-name" placeholder="如：华夏成长混合">
           </div>
           <div class="form-group">
@@ -453,7 +453,7 @@
           <input type="text" id="ocr-code" placeholder="如：000001">
         </div>
         <div class="form-group">
-          <label>基金名称</label>
+          <label>产品名称</label>
           <input type="text" id="ocr-name" placeholder="如：华夏成长混合">
         </div>
         <div id="ocr-holding-fields">
@@ -473,7 +473,7 @@
         </div><!-- end ocr-investment-fields -->
         <div id="ocr-transaction-fields" style="display:none">
           <div class="form-group">
-            <label>基金名称 <span class="required">*</span></label>
+            <label>产品名称 <span class="required">*</span></label>
             <select id="ocr-tx-fund">
               <option value="">选择持仓基金</option>
             </select>
@@ -554,7 +554,7 @@
           <select id="edit-tx-account"></select>
         </div>
         <div class="form-group">
-          <label>基金名称 <span class="required">*</span></label>
+          <label>产品名称 <span class="required">*</span></label>
           <select id="edit-tx-fund"></select>
         </div>
         <div class="form-group">
