@@ -1308,30 +1308,54 @@ async function processImageOCR(dataUrl, type) {
   finally { loadingEl.style.display = 'none'; }
 }
 
+// OCR 常把中文标签拆出空格（"成 本 净值"），用可容忍空格的模式匹配
+const ocrKey = (keys) => keys.map(k => k.split('').join('\\s*')).join('|');
+
 function parseHoldingOCR(text) {
   const r = { fundCode: '', fundName: '', shares: null, costPerShare: null, currentNav: null };
   const cm = text.match(/(\d{6})/); if (cm) r.fundCode = cm[1];
-  const sm = text.match(/(?:份额|持有份额|可用份额|确认份额)[^\d]{0,8}([\d,]+\.?\d*)/); if (sm) r.shares = parseFloat(sm[1].replace(/,/g, ''));
-  const costm = text.match(/(?:成本净值|成本价|买入净值|单位成本|持仓成本)[^\d]{0,8}(\d+\.?\d*)/); if (costm) r.costPerShare = parseFloat(costm[1]);
-  const nm = text.match(/(?:最新净值|当前净值|单位净值|现净值|净值)[^\d]{0,8}(\d+\.?\d*)/); if (nm) r.currentNav = parseFloat(nm[1]);
-  const namem = text.match(/(?:基金名称|基金简称|名称|持有基金)[^\n]{0,5}[:：]\s*(.+)/); if (namem) r.fundName = namem[1].trim().split(/\s/)[0];
+  const sm = text.match(new RegExp(`(?:${ocrKey(['份额', '持有份额', '可用份额', '确认份额'])})\\s*[:：]?\\s*([\\d,]+\\.?\\d*)`)); if (sm) r.shares = parseFloat(sm[1].replace(/,/g, ''));
+  const costm = text.match(new RegExp(`(?:${ocrKey(['成本净值', '成本价', '买入净值', '单位成本', '持仓成本'])})\\s*[:：]?\\s*(\\d+\\.?\\d*)`)); if (costm) r.costPerShare = parseFloat(costm[1]);
+  // 最新净值放最后且不重复匹配成本行（OCR 可能把两行数字互换次序）
+  const nm = text.match(new RegExp(`(?:${ocrKey(['最新净值', '当前净值', '单位净值', '现净值'])})\\s*[:：]?\\s*(\\d+\\.?\\d*)`));
+  if (!nm) { const m2 = text.match(/净值\D{0,8}(\d+\.?\d*)/g); if (m2 && m2.length >= 2) { const m3 = m2[m2.length - 1].match(/(\d+\.?\d*)/); if (m3) r.currentNav = parseFloat(m3[1]); } }
+  else r.currentNav = parseFloat(nm[1]);
+  const namem = text.match(new RegExp(`(?:${ocrKey(['基金名称', '基金简称', '持有基金'])})\\s*[:：]\\s*(.+)`));
+  if (namem) r.fundName = namem[1].replace(/\s+/g, '').trim();
+  // 名称兜底：找含"混合/基金/债券"等后缀的词组
+  if (!r.fundName) {
+    const fallback = text.match(/[\u4e00-\u9fa5A-Za-z0-9]{3,20}(?:混合|股票|债券|指数|FOF|QDII|货币)/);
+    if (fallback) r.fundName = fallback[0];
+  }
   return r;
 }
 
 function parseTransactionOCR(text) {
   const r = { fundCode: '', fundName: '', type: 'buy', price: null, amount: null, shares: null };
   const cm = text.match(/(\d{6})/); if (cm) r.fundCode = cm[1];
-  if (/赎回|卖出|减仓/.test(text)) r.type = 'sell';
-  else if (/买入|申购|认购|加仓/.test(text)) r.type = 'buy';
-  else if (/分红|派息/.test(text)) r.type = 'dividend';
-  const pm = text.match(/(?:成交价格|成交价|单价|价格|买入净值|申购净值)[^\d]{0,8}(\d+\.?\d*)/); if (pm) r.price = parseFloat(pm[1]);
-  const am = text.match(/(?:交易金额|成交金额|确认金额|金额)[^\d]{0,8}([\d,]+\.?\d*)/); if (am) r.amount = parseFloat(am[1].replace(/,/g, ''));
-  const sm = text.match(/(?:确认份额|交易份额|成交份额|份额)[^\d]{0,8}([\d,]+\.?\d*)/); if (sm) r.shares = parseFloat(sm[1].replace(/,/g, ''));
+  const plain = text.replace(/\s+/g, ''); // 去掉 OCR 拆字空格后做关键词判断
+  if (/赎回|卖出|减仓/.test(plain)) r.type = 'sell';
+  else if (/买入|申购|认购|加仓/.test(plain)) r.type = 'buy';
+  else if (/分红|派息/.test(plain)) r.type = 'dividend';
+  const pm = text.match(new RegExp(`(?:${ocrKey(['成交价格', '成交价', '单价', '买入净值', '申购净值'])})\\s*[:：]?\\s*(\\d+\\.?\\d*)`))
+    || text.match(new RegExp(`(?:${ocrKey(['价格'])})\\s*[:：]?\\s*(\\d+\\.?\\d*)`));
+  if (pm) r.price = parseFloat(pm[1]);
+  const am = text.match(new RegExp(`(?:${ocrKey(['交易金额', '成交金额', '确认金额'])})\\s*[:：]?\\s*([\\d,]+\\.?\\d*)`))
+    || text.match(new RegExp(`(?:${ocrKey(['金额'])})\\s*[:：]?\\s*([\\d,]+\\.?\\d*)`));
+  if (am) r.amount = parseFloat(am[1].replace(/,/g, ''));
+  const sm = text.match(new RegExp(`(?:${ocrKey(['确认份额', '交易份额', '成交份额'])})\\s*[:：]?\\s*([\\d,]+\\.?\\d*)`))
+    || text.match(new RegExp(`(?:${ocrKey(['份额'])})\\s*[:：]?\\s*([\\d,]+\\.?\\d*)`));
+  if (sm) r.shares = parseFloat(sm[1].replace(/,/g, ''));
   // If price not found but amount and shares found, derive price
   if (r.price == null && r.amount != null && r.shares != null && r.shares > 0) {
     r.price = r.amount / r.shares;
   }
-  const namem = text.match(/(?:基金名称|基金简称|名称)[^\n]{0,5}[:：]\s*(.+)/); if (namem) r.fundName = namem[1].trim().split(/\s/)[0];
+  const namem = text.match(new RegExp(`(?:${ocrKey(['基金名称', '基金简称'])})\\s*[:：]\\s*(.+)`));
+  if (namem) r.fundName = namem[1].replace(/\s+/g, '').trim();
+  if (!r.fundName) {
+    const fallback = text.match(/[\u4e00-\u9fa5A-Za-z0-9]{3,20}(?:混合|股票|债券|指数|FOF|QDII|货币)/);
+    if (fallback) r.fundName = fallback[0];
+  }
   return r;
 }
 
