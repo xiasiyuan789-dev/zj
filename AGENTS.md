@@ -19,6 +19,22 @@
 4. 未经验收和用户确认，不得推送。用户如明确说「免验收直接推」，可跳过验收但仍需打标签。
 5. 回退方法：在部署机上 `git fetch --tags && git checkout vX.Y.Z` 后刷新页面即可回到该版本（数据在 `data/` 目录，不受代码回退影响）。
 
+## 正式环境发布（CloudBase 云端版）
+
+正式环境是腾讯 CloudBase：https://xsy-db-d7g6fmldu0e8c5967-1513045239.tcloudbaseapp.com
+（环境 ID `xsy-db-d7g6fmldu0e8c5967`，静态托管 + 云函数 vault-app + PostgreSQL vaults 表；用户金库数据在该数据库中）
+
+推送打完标签后，执行云端发布：
+
+1. 生成部署包（`dist/` 已被 gitignore）：
+   ```bash
+   rm -rf dist && mkdir -p dist && cp public/*.* dist/
+   sed -i "s|const API_BASE = '/functions/v1/app';|const API_BASE = 'https://xsy-db-d7g6fmldu0e8c5967.service.tcloudbase.com/functions/v1/app';|" dist/app.js
+   ```
+2. 部署（CloudBase CLI 已装好并登录）：`tcb hosting deploy dist -e xsy-db-d7g6fmldu0e8c5967`
+3. 线上验证：curl 检查 `<title>` 与 app.js 中的新版本特征（注意 CDN 缓存，加 `?v=随机数` 参数绕过），并告知用户强刷。
+注意：云端部署的前端与仓库唯一差异是 app.js 的 API_BASE 地址（静态托管与云函数不同域名，需绝对地址）。
+
 ## 其他约定
 
 - 多设备协作：如果用户在另一台电脑上直接改过代码，AI 动手前必须先 `git pull`，避免冲突。
