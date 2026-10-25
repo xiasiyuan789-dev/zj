@@ -1068,9 +1068,13 @@ function openModal(id) {
     populateAccountSelect(selectMap[id]);
   }
   if (id === 'modal-holding') {
+    document.getElementById('hold-product-type').value = '';
+    document.getElementById('hold-date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('hold-cash-amount').value = '';
+    ['hold-code', 'hold-name', 'hold-shares', 'hold-cost', 'hold-nav'].forEach(fid => document.getElementById(fid).value = '');
+    document.getElementById('holding-manual-fields').style.display = 'none';
     document.getElementById('holding-upload-area').style.display = 'none';
     clearImagePreview('holding');
-    document.getElementById('hold-product-type').value = '';
   }
   if (id === 'modal-transaction') {
     const today = new Date().toISOString().split('T')[0];
@@ -1099,11 +1103,55 @@ function closeModal(id) {
   if (!document.querySelector('.modal[style*="flex"]')) document.body.classList.remove('modal-open');
 }
 
+// 选择账户+产品类型后展开内联手动录入表单；图片识别按钮作为辅助入口
 function checkHoldingUploadVisibility() {
   const acc = document.getElementById('hold-account').value;
   const pt = document.getElementById('hold-product-type').value;
-  document.getElementById('holding-upload-area').style.display = (acc && pt) ? 'block' : 'none';
-  if (acc && pt) pendingProductType = pt;
+  const ready = acc && pt;
+  document.getElementById('holding-manual-fields').style.display = ready ? 'block' : 'none';
+  document.getElementById('holding-upload-area').style.display = ready ? 'block' : 'none';
+  const isCash = pt === '现金';
+  document.getElementById('hold-cash-group').style.display = isCash ? 'block' : 'none';
+  document.getElementById('hold-investment-fields').style.display = isCash ? 'none' : 'block';
+  if (ready) {
+    pendingProductType = pt;
+    document.getElementById('hold-date').value = new Date().toISOString().split('T')[0];
+  }
+}
+
+// 内联手动保存
+function handleAddHolding(e) {
+  e.preventDefault();
+  const accountId = document.getElementById('hold-account').value;
+  if (!accountId) return showError('请选择账户');
+  const productType = document.getElementById('hold-product-type').value;
+  if (!productType) return showError('请选择产品类型');
+  const date = document.getElementById('hold-date').value || new Date().toISOString().split('T')[0];
+
+  if (productType === '现金') {
+    const cashAmount = parseFloat(document.getElementById('hold-cash-amount').value);
+    if (isNaN(cashAmount) || cashAmount < 0) return showError('请填写现金金额');
+    vaultData.holdings.push({ id: crypto.randomUUID(), accountId, productType, fundCode: '', fundName: '', shares: cashAmount, costPerShare: 1, currentNav: 1, date });
+  } else {
+    const fundCode = document.getElementById('hold-code').value.trim();
+    const fundName = document.getElementById('hold-name').value.trim();
+    if (!fundName) return showError('请填写产品名称');
+    let shares = parseFloat(document.getElementById('hold-shares').value);
+    let costPerShare = parseFloat(document.getElementById('hold-cost').value);
+    let currentNav = parseFloat(document.getElementById('hold-nav').value);
+    if (isNaN(shares) || isNaN(costPerShare)) {
+      const txCalc = calculateSharesAndCostFromTransactions(accountId, fundCode, fundName);
+      if (isNaN(shares)) shares = txCalc.shares;
+      if (isNaN(costPerShare)) costPerShare = txCalc.costPerShare;
+    }
+    if (isNaN(shares)) shares = 0;
+    if (isNaN(costPerShare)) costPerShare = 0;
+    if (isNaN(currentNav)) currentNav = costPerShare || 0;
+    vaultData.holdings.push({ id: crypto.randomUUID(), accountId, productType, fundCode, fundName, shares, costPerShare, currentNav, date });
+  }
+
+  closeModal('modal-holding');
+  saveVault().then(() => { renderDashboard(); showError('持仓已保存', true); }).catch(showError);
 }
 
 // --- Transaction modal: tiled account/fund picker ---
@@ -1298,14 +1346,32 @@ async function processImageOCR(dataUrl, type) {
     loadingText.textContent = '正在识别图片内容...';
     const { data } = await worker.recognize(dataUrl);
     const text = data.text || '';
-    let parsed = type === 'holding' ? parseHoldingOCR(text) : parseTransactionOCR(text);
-    if (type === 'holding') parsed.productType = pendingProductType;
-    showOCRConfirmation(parsed, type);
+    const parsed = type === 'holding' ? parseHoldingOCR(text) : parseTransactionOCR(text);
+    if (type === 'holding') {
+      fillHoldingFormFromOCR(parsed);
+    } else {
+      showOCRConfirmation(parsed, type);
+    }
   } catch (err) {
     console.error('OCR failed:', err);
     showError('图片识别失败，请重试或改用手动录入');
   }
   finally { loadingEl.style.display = 'none'; }
+}
+
+// 识别结果回填内联表单，用户核对后自行保存
+function fillHoldingFormFromOCR(parsed) {
+  if (parsed.productType === '现金') {
+    if (parsed.shares != null && !isNaN(parsed.shares)) document.getElementById('hold-cash-amount').value = parsed.shares;
+  } else {
+    if (parsed.fundCode) document.getElementById('hold-code').value = parsed.fundCode;
+    if (parsed.fundName) document.getElementById('hold-name').value = parsed.fundName;
+    if (parsed.shares != null && !isNaN(parsed.shares)) document.getElementById('hold-shares').value = parsed.shares;
+    if (parsed.costPerShare != null && !isNaN(parsed.costPerShare)) document.getElementById('hold-cost').value = parsed.costPerShare;
+    if (parsed.currentNav != null && !isNaN(parsed.currentNav)) document.getElementById('hold-nav').value = parsed.currentNav;
+  }
+  const filled = [parsed.fundName, parsed.shares, parsed.costPerShare, parsed.currentNav].filter(v => v != null && v !== '').length;
+  showError(filled > 0 ? '识别完成，已填入表单，请核对后保存' : '未识别到有效字段，请手动填写', filled > 0);
 }
 
 // OCR 常把中文标签拆出空格（"成 本 净值"），用可容忍空格的模式匹配
@@ -1408,42 +1474,6 @@ function showOCRConfirmation(data, type) {
   document.getElementById('ocr-date').value = new Date().toISOString().split('T')[0];
   document.getElementById('modal-ocr-confirm').style.display = 'flex';
 }
-
-window.openManualEntry = function(type) {
-  ocrMode = type;
-  closeModal(type === 'holding' ? 'modal-holding' : 'modal-transaction');
-  populateAccountSelect('ocr-account');
-  populateProductTypeSelect('ocr-product-type', pendingProductType || '');
-  if (type === 'holding') {
-    const srcAcc = document.getElementById('hold-account').value;
-    if (srcAcc) document.getElementById('ocr-account').value = srcAcc;
-    document.getElementById('ocr-holding-fields').style.display = 'block';
-    document.getElementById('ocr-transaction-fields').style.display = 'none';
-    document.getElementById('ocr-product-type-group').style.display = 'block';
-    document.getElementById('ocr-confirm-title').textContent = '手动录入持仓';
-    // Toggle cash vs investment fields based on product type
-    const isCash = (pendingProductType || '') === '现金';
-    document.getElementById('ocr-cash-group').style.display = isCash ? 'block' : 'none';
-    document.getElementById('ocr-investment-fields').style.display = isCash ? 'none' : 'block';
-  } else {
-    const srcAcc = txSelection?.accountId || '';
-    if (srcAcc) document.getElementById('ocr-account').value = srcAcc;
-    document.getElementById('ocr-holding-fields').style.display = 'none';
-    document.getElementById('ocr-transaction-fields').style.display = 'block';
-    document.getElementById('ocr-product-type-group').style.display = 'none';
-    document.getElementById('ocr-confirm-title').textContent = '手动录入交易';
-    // Populate fund dropdown for transaction
-    const accId = document.getElementById('ocr-account').value;
-    populateTxFundSelect(accId);
-    document.getElementById('ocr-tx-fund').value = '';
-  }
-  ['ocr-code','ocr-name','ocr-shares','ocr-cost','ocr-nav','ocr-price'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('ocr-tx-type').value = 'buy';
-  document.getElementById('ocr-amount').value = '';
-  document.getElementById('ocr-tx-shares').value = '';
-  document.getElementById('ocr-date').value = new Date().toISOString().split('T')[0];
-  document.getElementById('modal-ocr-confirm').style.display = 'flex';
-};
 
 function handleOCRConfirm(e) {
   e.preventDefault();
@@ -2023,6 +2053,7 @@ window.exportBackupData = async () => JSON.stringify(await buildBackupPayload(),
 updatePrivacyButton();
 document.getElementById('auth-form').addEventListener('submit', handleAuth);
 document.getElementById('form-account').addEventListener('submit', handleAddAccount);
+document.getElementById('form-holding').addEventListener('submit', handleAddHolding);
 document.getElementById('form-rename-account').addEventListener('submit', handleRenameAccount);
 document.getElementById('form-edit-holding').addEventListener('submit', handleEditHolding);
 document.getElementById('form-ocr-confirm').addEventListener('submit', handleOCRConfirm);

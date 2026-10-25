@@ -326,25 +326,54 @@
             <option value="期权">期权</option>
           </select>
         </div>
-        <div id="holding-upload-area" style="display:none">
-          <div class="image-upload-area" id="holding-upload-trigger">
-            <div class="upload-icon">📷</div>
-            <p>点击上传持仓截图</p>
-            <p class="upload-hint">支持识别产品名称、份额、成本净值、最新净值</p>
-            <input type="file" id="holding-image" accept="image/*" style="display:none">
+        <div id="holding-manual-fields" style="display:none">
+          <div class="form-group" id="hold-cash-group" style="display:none">
+            <label>现金金额 <span class="required">*</span></label>
+            <input type="number" id="hold-cash-amount" step="0.01" placeholder="如：50000">
           </div>
-          <div id="holding-preview" class="image-preview" style="display:none">
-            <img id="holding-preview-img" alt="预览">
-            <div class="preview-actions">
-              <button type="button" class="btn btn-secondary btn-sm" onclick="clearImagePreview('holding')">重新选择</button>
+          <div id="hold-investment-fields" style="display:none">
+            <div class="form-group">
+              <label>基金代码</label>
+              <input type="text" id="hold-code" placeholder="如：000001">
+            </div>
+            <div class="form-group">
+              <label>产品名称 <span class="required">*</span></label>
+              <input type="text" id="hold-name" placeholder="如：华夏成长混合">
+            </div>
+            <div class="form-group">
+              <label>持有份额 <span style="font-size:12px;color:var(--text-muted)">（选填）</span></label>
+              <input type="number" id="hold-shares" step="0.01">
+            </div>
+            <div class="form-group">
+              <label>成本净值 <span style="font-size:12px;color:var(--text-muted)">（选填）</span></label>
+              <input type="number" id="hold-cost" step="0.0001">
+            </div>
+            <div class="form-group">
+              <label>最新净值 <span style="font-size:12px;color:var(--text-muted)">（选填）</span></label>
+              <input type="number" id="hold-nav" step="0.0001">
             </div>
           </div>
-          <div class="manual-entry-link">
-            <a href="javascript:void(0)" onclick="openManualEntry('holding')">手动录入</a>
+          <div class="form-group">
+            <label>日期</label>
+            <input type="date" id="hold-date">
           </div>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-holding')">取消</button>
+          <div id="holding-upload-area" style="display:none">
+            <button type="button" class="btn btn-secondary btn-ocr-toggle" id="holding-upload-trigger">
+              📷 图片识别辅助录入
+            </button>
+            <p class="upload-hint" style="margin-top:6px">上传持仓截图，自动填入名称/份额/净值（可选，结果需人工确认）</p>
+            <input type="file" id="holding-image" accept="image/*" style="display:none">
+            <div id="holding-preview" class="image-preview" style="display:none">
+              <img id="holding-preview-img" alt="预览">
+              <div class="preview-actions">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="clearImagePreview('holding')">重新选择</button>
+              </div>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('modal-holding')">取消</button>
+            <button type="submit" class="btn btn-primary">保存</button>
+          </div>
         </div>
       </form>
     </div>

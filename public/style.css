@@ -165,6 +165,15 @@ body.modal-open { overflow: hidden; }
   color: var(--positive);
 }
 
+/* 图片识别辅助录入按钮 */
+.btn-ocr-toggle {
+  width: 100%;
+  justify-content: center;
+  border: 1px dashed var(--border);
+}
+
+.btn-ocr-toggle:hover { border-color: var(--primary); }
+
 .import-link { margin-top: 8px; font-size: 13px; }
 
 /* Dashboard */
