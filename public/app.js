@@ -580,7 +580,7 @@ function renderTrendChart() {
   const outer = scrollWrap.parentElement;    // 图表外层（悬浮提示定位基准）
   const dpr = window.devicePixelRatio || 1;
   const viewW = scrollWrap.clientWidth;
-  const displayH = 280;
+  const displayH = window.innerWidth <= 480 ? 230 : 280;
   // 数据点多时画布自动加宽（每个点至少 8px），支持左右滚动查看历史
   const pad = { top: 24, right: 20, bottom: 44, left: 64 };
   const displayW = Math.max(viewW, pad.left + pad.right + Math.max(0, data.length - 1) * 8);
@@ -1092,8 +1092,12 @@ function openModal(id) {
     document.getElementById('tx-transfer-date').value = today;
   }
   document.getElementById(id).style.display = 'flex';
+  document.body.classList.add('modal-open');
 }
-function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+function closeModal(id) {
+  document.getElementById(id).style.display = 'none';
+  if (!document.querySelector('.modal[style*="flex"]')) document.body.classList.remove('modal-open');
+}
 
 function checkHoldingUploadVisibility() {
   const acc = document.getElementById('hold-account').value;
@@ -2002,6 +2006,11 @@ document.getElementById('form-transaction').addEventListener('submit', handleAdd
 document.getElementById('form-edit-transaction').addEventListener('submit', handleEditTransaction);
 document.getElementById('form-csv').addEventListener('submit', handleCsvImport);
 document.getElementById('btn-logout').addEventListener('click', handleLogout);
+
+// 点击弹窗背景区域关闭弹窗（移动端友好）
+document.querySelectorAll('.modal').forEach(m => {
+  m.addEventListener('click', (e) => { if (e.target === m) closeModal(m.id); });
+});
 document.getElementById('btn-backup').addEventListener('click', handleBackup);
 document.getElementById('import-backup-file').addEventListener('change', function() {
   const file = this.files && this.files[0];

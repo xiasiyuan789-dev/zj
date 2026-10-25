@@ -1,0 +1,12 @@
+{
+  "name": "藏金阁 - 资产管理",
+  "short_name": "藏金阁",
+  "description": "端到端加密的个人资产管理",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0f1117",
+  "theme_color": "#0f1117",
+  "icons": [
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

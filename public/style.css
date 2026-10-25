@@ -21,6 +21,22 @@ body {
   line-height: 1.6;
 }
 
+@supports (min-height: 100dvh) {
+  body { min-height: 100dvh; }
+}
+
+/* 触摸设备基础优化：去除点击高光、消除双击缩放延迟、按压反馈 */
+html { -webkit-text-size-adjust: 100%; }
+body { -webkit-tap-highlight-color: transparent; }
+.btn, .btn-icon, .btn-edit, .btn-del, .picker-tile, .filter-chip, .chart-range, .switch-link {
+  touch-action: manipulation;
+}
+.btn:active, .picker-tile:active, .filter-chip:active, .chart-range:active { transform: scale(0.96); }
+.btn-edit:active, .btn-del:active { opacity: 0.7; }
+
+/* 弹窗打开时锁定背景滚动 */
+body.modal-open { overflow: hidden; }
+
 /* Auth Screen */
 #auth-screen {
   display: flex;
@@ -855,21 +871,66 @@ th {
 
 /* Responsive */
 @media (max-width: 768px) {
-  #dashboard { padding: 16px; }
-  .stats-grid { grid-template-columns: 1fr 1fr; }
+  #dashboard {
+    padding: 16px 16px calc(32px + env(safe-area-inset-bottom));
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+  #auth-screen {
+    padding: 20px;
+    padding-left: max(20px, env(safe-area-inset-left));
+    padding-right: max(20px, env(safe-area-inset-right));
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  }
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .stat-card { padding: 14px; }
+  .stat-card .value { font-size: 20px; }
   .header { flex-direction: column; align-items: flex-start; gap: 12px; }
-  .actions { flex-wrap: wrap; }
-  th, td { padding: 8px 12px; font-size: 13px; }
+  .actions { flex-wrap: wrap; width: 100%; }
+  .actions .btn { flex: 1 1 auto; min-height: 44px; }
+
+  /* 表单输入 16px 起：防止 iOS Safari 聚焦自动放大页面 */
+  .form-group input, .form-group select { font-size: 16px; padding: 12px 14px; }
+
+  /* 触摸目标加大到 44px+ */
+  .btn-sm { padding: 10px 14px; }
+  .btn-icon { padding: 8px 10px; font-size: 20px; }
+  .btn-edit, .btn-del { padding: 8px 14px; font-size: 13px; }
+  .filter-chip { padding: 8px 14px; }
+  .picker-tile { padding: 12px; }
+  .modal-actions .btn { min-height: 48px; }
+
+  /* 表格紧凑化 */
+  th, td { padding: 10px; font-size: 13px; }
+
+  /* 弹窗改为 iOS 底部抽屉 */
+  .modal { padding: 0; align-items: flex-end; }
+  .modal-content {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 16px 16px 0 0;
+    padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+    max-height: 92dvh;
+    animation: sheetUp 0.22s ease;
+  }
   .modal-actions { flex-direction: column; }
   .modal-actions .btn { width: 100%; }
-  .modal-content { padding: 20px; }
   .image-upload-area { padding: 24px 16px; }
   .upload-icon { font-size: 32px; }
+  .cash-balance-bar { padding: 12px 14px; }
+}
+
+@keyframes sheetUp {
+  from { transform: translateY(36px); opacity: 0.7; }
+  to { transform: none; opacity: 1; }
 }
 
 @media (max-width: 480px) {
-  .stats-grid { grid-template-columns: 1fr; }
+  /* iPhone 等现代手机保持两列统计卡片 */
+  .stats-grid { grid-template-columns: 1fr 1fr; }
   .auth-card { padding: 24px; }
+  .stat-sub { font-size: 12px; }
+  .breakdown-value { font-size: 14px; }
 }
 
 /* --- Quick Daily Entry (今日快录) --- */
