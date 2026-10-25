@@ -895,17 +895,19 @@ function renderHistory() {
   container.innerHTML = sorted.map((snap, idx) => {
     const pnl = snap.totalValue - snap.totalCost;
     const pnlRate = snap.totalCost > 0 ? (pnl / snap.totalCost * 100).toFixed(2) : '0.00';
-    const holdingsHtml = (snap.holdings || []).map(h => `
+    const holdingsHtml = (snap.holdings || []).map(h => {
+      const value = (h.shares || 0) * (h.currentNav || 0);
+      const cost = (h.shares || 0) * (h.costPerShare || 0);
+      const rate = cost > 0 ? (value - cost) / cost * 100 : 0;
+      return `
       <div class="history-holding-row">
         <span class="history-holding-name">${esc(h.accountName)} · ${esc(h.fundName)}</span>
         <span class="history-holding-detail">
-          ${maskText(h.shares.toFixed(2))}份 · 净值${maskText(h.currentNav.toFixed(4))} ·
-          <span class="${(h.shares * h.currentNav - h.shares * h.costPerShare) >= 0 ? 'positive' : 'negative'}">
-            ${maskText(`${(h.shares * h.currentNav - h.shares * h.costPerShare) >= 0 ? '+' : ''}¥${thousands(h.shares * h.currentNav - h.shares * h.costPerShare)}`)}
-          </span>
+          ${maskText(`¥${thousands(value)}`)} ·
+          <span class="${rate >= 0 ? 'positive' : 'negative'}">${maskText(`${rate >= 0 ? '+' : ''}${rate.toFixed(2)}%`)}</span>
         </span>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
 
     return `
       <div class="history-card">
