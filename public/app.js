@@ -20,6 +20,11 @@ try { privacyMode = localStorage.getItem('fv-privacy') === '1'; } catch {}
 
 function maskText(s) { return privacyMode ? '****' : String(s); }
 
+// 金额千位符格式化：1234567.8 -> 1,234,567.80
+function thousands(n) {
+  return Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 const PRODUCT_TYPES = ['股票型基金', '债券型基金', '现金', '理财', '股票', '期权'];
 
 // --- Cash & holding side effects of transactions ---
@@ -378,19 +383,19 @@ function renderDashboard() {
   const rateBase = invested > 0 ? invested : totalCost;
   const totalPnlRate = rateBase > 0 ? (totalPnl / rateBase * 100).toFixed(2) : '0.00';
 
-  document.getElementById('total-assets').textContent = maskText(`¥${totalAssets.toFixed(2)}`);
-  document.getElementById('total-pnl').textContent = maskText(`${totalPnl >= 0 ? '+' : ''}¥${totalPnl.toFixed(2)}`);
+  document.getElementById('total-assets').textContent = maskText(`¥${thousands(totalAssets)}`);
+  document.getElementById('total-pnl').textContent = maskText(`${totalPnl >= 0 ? '+' : ''}¥${thousands(totalPnl)}`);
   document.getElementById('total-pnl').className = totalPnl >= 0 ? 'positive' : 'negative';
   document.getElementById('total-pnl-rate').textContent = maskText(`${totalPnl >= 0 ? '+' : ''}${totalPnlRate}%`);
   document.getElementById('total-pnl-rate').className = totalPnl >= 0 ? 'positive' : 'negative';
   const splitEl = document.getElementById('pnl-split');
   if (splitEl) {
-    splitEl.textContent = maskText(`已实现 ${realized >= 0 ? '+' : ''}¥${realized.toFixed(2)} · 浮动 ${floatingPnl >= 0 ? '+' : ''}¥${floatingPnl.toFixed(2)}`);
+    splitEl.textContent = maskText(`已实现 ${realized >= 0 ? '+' : ''}¥${thousands(realized)} · 浮动 ${floatingPnl >= 0 ? '+' : ''}¥${thousands(floatingPnl)}`);
     splitEl.className = 'stat-sub ' + (totalPnl >= 0 ? 'positive' : 'negative');
   }
   document.getElementById('account-count').textContent = accounts.length;
-  document.getElementById('cash-total').textContent = maskText(`¥${cashTotal.toFixed(2)}`);
-  document.getElementById('invest-total').textContent = maskText(`¥${investTotal.toFixed(2)}`);
+  document.getElementById('cash-total').textContent = maskText(`¥${thousands(cashTotal)}`);
+  document.getElementById('invest-total').textContent = maskText(`¥${thousands(investTotal)}`);
 
   renderAccounts(accounts, holdings, transactions);
   renderHoldings(holdings, accounts);
@@ -422,8 +427,8 @@ function renderAccounts(accounts, holdings, transactions) {
           </div>
         </div>
         <div class="account-stats">
-          <span>资产: ${maskText(`¥${accValue.toFixed(2)}`)}</span>
-          <span class="${accPnl >= 0 ? 'positive' : 'negative'}">收益: ${maskText(`${accPnl >= 0 ? '+' : ''}¥${accPnl.toFixed(2)}`)}</span>
+          <span>资产: ${maskText(`¥${thousands(accValue)}`)}</span>
+          <span class="${accPnl >= 0 ? 'positive' : 'negative'}">收益: ${maskText(`${accPnl >= 0 ? '+' : ''}¥${thousands(accPnl)}`)}</span>
         </div>
       </div>`;
   }).join('');
@@ -490,7 +495,7 @@ function renderHoldings(holdings, accounts) {
           <td>-</td>
           <td>-</td>
           <td>-</td>
-          <td class="cash-amount-cell">${maskText(`¥${marketValue.toFixed(2)}`)}</td>
+          <td class="cash-amount-cell">${maskText(`¥${thousands(marketValue)}`)}</td>
           <td>-</td>
           <td>${h.date || '-'}</td>
           <td><button class="btn-edit" onclick="editHolding('${h.id}')">编辑</button></td>
@@ -506,9 +511,9 @@ function renderHoldings(holdings, accounts) {
         <td>${sharesLabel}</td>
         <td>${costLabel}</td>
         <td>${maskText((h.currentNav || 0).toFixed(4))}</td>
-        <td>${maskText(`¥${marketValue.toFixed(2)}`)}</td>
+        <td>${maskText(`¥${thousands(marketValue)}`)}</td>
         <td class="${pnl >= 0 ? 'positive' : 'negative'}">
-          ${maskText(`${pnl >= 0 ? '+' : ''}¥${pnl.toFixed(2)}`)} (${maskText(`${pnl >= 0 ? '+' : ''}${pnlRate}%`)})
+          ${maskText(`${pnl >= 0 ? '+' : ''}¥${thousands(pnl)}`)} (${maskText(`${pnl >= 0 ? '+' : ''}${pnlRate}%`)})
         </td>
         <td>${h.date || '-'}</td>
         <td><button class="btn-edit" onclick="editHolding('${h.id}')">编辑</button></td>
@@ -545,7 +550,7 @@ function renderTransactions(transactions, accounts) {
         <td><span class="tx-type ${typeClass}">${typeLabel}</span></td>
         <td>${priceStr}</td>
         <td>${sharesStr}</td>
-        <td>${t.type === 'dividend' ? '-' : maskText(`¥${t.amount.toFixed(2)}`)}</td>
+        <td>${t.type === 'dividend' ? '-' : maskText(`¥${thousands(t.amount)}`)}</td>
         <td>${editCell}</td>
       </tr>`;
   }).join('');
@@ -717,7 +722,7 @@ function renderTrendChart() {
       const s = data[closest];
       const pnl = s.totalValue - s.totalCost;
       const pnlRate = s.totalCost > 0 ? (pnl / s.totalCost * 100).toFixed(2) : '0.00';
-      tooltip.innerHTML = `<div>${s.date}</div><div>市值: ${maskText(`¥${s.totalValue.toFixed(2)}`)}</div><div>成本: ${maskText(`¥${s.totalCost.toFixed(2)}`)}</div><div class="${pnl >= 0 ? 'positive' : 'negative'}">收益: ${maskText(`${pnl >= 0 ? '+' : ''}¥${pnl.toFixed(2)} (${pnl >= 0 ? '+' : ''}${pnlRate}%)`)}</div>`;
+      tooltip.innerHTML = `<div>${s.date}</div><div>市值: ${maskText(`¥${thousands(s.totalValue)}`)}</div><div>成本: ${maskText(`¥${thousands(s.totalCost)}`)}</div><div class="${pnl >= 0 ? 'positive' : 'negative'}">收益: ${maskText(`${pnl >= 0 ? '+' : ''}¥${thousands(pnl)} (${pnl >= 0 ? '+' : ''}${pnlRate}%)`)}</div>`;
       tooltip.style.display = 'block';
       const tx = toX(closest);
       const ty = toY(values[closest]);
@@ -793,7 +798,7 @@ function renderAllocation() {
       <div class="allocation-legend-row">
         <span class="allocation-dot" style="background:${allocationColor(d.productType)}"></span>
         <span class="allocation-name">${esc(d.productType)}</span>
-        <span class="allocation-value">${maskText(`¥${d.value.toFixed(2)}`)}</span>
+        <span class="allocation-value">${maskText(`¥${thousands(d.value)}`)}</span>
         <span class="allocation-pct">${pct.toFixed(1)}%</span>
       </div>`;
   }).join('');
@@ -828,7 +833,7 @@ function renderAllocation() {
     start += angle;
   });
 
-  const totalLabel = total >= 10000 ? `¥${(total / 10000).toFixed(2)}万` : `¥${total.toFixed(2)}`;
+  const totalLabel = total >= 10000 ? `¥${(total / 10000).toFixed(2)}万` : `¥${thousands(total)}`;
   ctx.fillStyle = '#e4e4e7';
   ctx.font = '600 14px -apple-system, sans-serif';
   ctx.textAlign = 'center';
@@ -867,7 +872,7 @@ function renderHistory() {
         <span class="history-holding-detail">
           ${maskText(h.shares.toFixed(2))}份 · 净值${maskText(h.currentNav.toFixed(4))} ·
           <span class="${(h.shares * h.currentNav - h.shares * h.costPerShare) >= 0 ? 'positive' : 'negative'}">
-            ${maskText(`${(h.shares * h.currentNav - h.shares * h.costPerShare) >= 0 ? '+' : ''}¥${(h.shares * h.currentNav - h.shares * h.costPerShare).toFixed(2)}`)}
+            ${maskText(`${(h.shares * h.currentNav - h.shares * h.costPerShare) >= 0 ? '+' : ''}¥${thousands(h.shares * h.currentNav - h.shares * h.costPerShare)}`)}
           </span>
         </span>
       </div>
@@ -878,10 +883,10 @@ function renderHistory() {
         <div class="history-header" onclick="toggleHistory(${idx})">
           <div>
             <span class="history-date">${snap.date}</span>
-            <span class="history-value">${maskText(`¥${snap.totalValue.toFixed(2)}`)}</span>
+            <span class="history-value">${maskText(`¥${thousands(snap.totalValue)}`)}</span>
           </div>
           <div class="history-summary">
-            <span class="${pnl >= 0 ? 'positive' : 'negative'}">${maskText(`${pnl >= 0 ? '+' : ''}¥${pnl.toFixed(2)} (${pnl >= 0 ? '+' : ''}${pnlRate}%)`)}</span>
+            <span class="${pnl >= 0 ? 'positive' : 'negative'}">${maskText(`${pnl >= 0 ? '+' : ''}¥${thousands(pnl)} (${pnl >= 0 ? '+' : ''}${pnlRate}%)`)}</span>
             <span class="history-toggle" id="history-toggle-${idx}">▼</span>
           </div>
         </div>
@@ -1075,14 +1080,14 @@ function renderTxFundPicker() {
     const cashList = accHoldings.filter(h => h.productType === '现金');
     const funds = accHoldings.filter(h => h.productType !== '现金' && h.fundName);
     const tiles = [
-      ...cashList.map(h => pickerTileHtml(h, '现金', `¥${(h.shares || 0).toFixed(2)}`, '💰')),
+      ...cashList.map(h => pickerTileHtml(h, '现金', `¥${thousands(h.shares || 0)}`, '💰')),
       ...funds.map(h => pickerTileHtml(h, h.fundCode ? `${h.fundName} (${h.fundCode})` : h.fundName, `${(h.shares || 0).toFixed(2)}份`, '📈'))
     ].join('');
     return `
       <div class="picker-account">
         <div class="picker-account-header">
           <span class="picker-account-name">${esc(acc.name)}</span>
-          <span class="picker-account-cash">现金 ${maskText(`¥${getAccountCash(acc.id).toFixed(2)}`)}</span>
+          <span class="picker-account-cash">现金 ${maskText(`¥${thousands(getAccountCash(acc.id))}`)}</span>
         </div>
         <div class="picker-funds">${tiles || '<span class="picker-no-fund">无持仓</span>'}</div>
       </div>`;
@@ -1113,7 +1118,7 @@ window.selectTxFund = function(holdingId) {
   document.querySelectorAll('#tx-fund-picker .picker-tile').forEach(b =>
     b.classList.toggle('selected', b.dataset.holding === holdingId));
   document.getElementById('tx-cash-bar').style.display = 'flex';
-  document.getElementById('tx-cash-balance').textContent = maskText(`¥${getAccountCash(h.accountId).toFixed(2)}`);
+  document.getElementById('tx-cash-balance').textContent = maskText(`¥${thousands(getAccountCash(h.accountId))}`);
   const isCash = txSelection.isCash;
   document.getElementById('tx-normal-fields').style.display = isCash ? 'none' : 'block';
   document.getElementById('tx-transfer-fields').style.display = isCash ? 'block' : 'none';
@@ -1141,7 +1146,7 @@ function populateToFundSelect(toAccountId) {
     return;
   }
   sel.innerHTML = '<option value="">选择转入基金</option>' +
-    cashList.map(h => `<option value="${h.id}">现金（余额 ¥${(h.shares || 0).toFixed(2)}）</option>`).join('');
+    cashList.map(h => `<option value="${h.id}">现金（余额 ¥${thousands(h.shares || 0)}）</option>`).join('');
 }
 
 // --- Account ---
@@ -1655,7 +1660,7 @@ function updateQuickDelta(input) {
   if (!navInput.value || isNaN(v) || !h.currentNav) { el.textContent = ''; return; }
   const pct = (v - h.currentNav) / h.currentNav * 100;
   const money = (h.shares || 0) * (v - h.currentNav);
-  el.textContent = `${pct >= 0 ? '↗ +' : '↘ '}${pct.toFixed(2)}%  ${money >= 0 ? '+' : ''}¥${money.toFixed(2)}`;
+  el.textContent = `${pct >= 0 ? '↗ +' : '↘ '}${pct.toFixed(2)}%  ${money >= 0 ? '+' : ''}¥${thousands(money)}`;
   el.className = 'quick-delta ' + (pct >= 0 ? 'positive' : 'negative');
 }
 
