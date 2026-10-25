@@ -475,11 +475,23 @@ th {
   padding: 16px;
 }
 
-.chart-container canvas {
-  display: block;
-  width: 100%;
-  cursor: crosshair;
+.chart-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
 }
+
+.chart-scroll::-webkit-scrollbar { height: 8px; }
+.chart-scroll::-webkit-scrollbar-track { background: transparent; }
+.chart-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.chart-scroll::-webkit-scrollbar-thumb:hover { background: #3a3d4a; }
+
+.chart-scroll canvas {
+  display: block;
+  cursor: grab;
+}
+
+.chart-scroll canvas:active { cursor: grabbing; }
 
 .chart-tooltip {
   display: none;

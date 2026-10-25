@@ -13,6 +13,7 @@ let pendingProductType = '';
 
 // Chart state
 let chartRange = 'all';
+let chartScrollToEnd = true; // 渲染后是否把趋势图滚动到最新一端
 
 // 金额显隐（隐私模式）：开启后所有金额/份额/净值以 **** 显示，状态持久化
 let privacyMode = false;
@@ -574,10 +575,14 @@ function renderTrendChart() {
   }
 
   const canvas = document.getElementById('trend-chart');
-  const container = canvas.parentElement;
+  const scrollWrap = canvas.parentElement;   // 横向滚动容器
+  const outer = scrollWrap.parentElement;    // 图表外层（悬浮提示定位基准）
   const dpr = window.devicePixelRatio || 1;
-  const displayW = container.clientWidth;
+  const viewW = scrollWrap.clientWidth;
   const displayH = 280;
+  // 数据点多时画布自动加宽（每个点至少 8px），支持左右滚动查看历史
+  const pad = { top: 24, right: 20, bottom: 44, left: 64 };
+  const displayW = Math.max(viewW, pad.left + pad.right + Math.max(0, data.length - 1) * 8);
   canvas.width = displayW * dpr;
   canvas.height = displayH * dpr;
   canvas.style.width = displayW + 'px';
@@ -587,7 +592,6 @@ function renderTrendChart() {
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, displayW, displayH);
 
-  const pad = { top: 24, right: 20, bottom: 44, left: 64 };
   const w = displayW - pad.left - pad.right;
   const h = displayH - pad.top - pad.bottom;
 
@@ -621,7 +625,7 @@ function renderTrendChart() {
   ctx.fillStyle = '#9ca3af';
   ctx.font = '11px -apple-system, sans-serif';
   ctx.textAlign = 'center';
-  const labelStep = Math.max(1, Math.ceil(data.length / 6));
+  const labelStep = Math.max(1, Math.ceil(data.length / Math.max(1, Math.floor(w / 90))));
   data.forEach((s, i) => {
     if (i % labelStep === 0 || i === data.length - 1) {
       const x = pad.left + (data.length > 1 ? (i / (data.length - 1)) * w : w / 2);
@@ -687,29 +691,51 @@ function renderTrendChart() {
     ctx.stroke();
   });
 
-  // Legend
+  // Legend（绘制在最右端，默认视图停留在最新数据一侧）
+  const legendX = displayW - pad.right - 88;
   ctx.fillStyle = '#22c55e';
-  ctx.fillRect(pad.left, displayH - 14, 12, 3);
+  ctx.fillRect(legendX, displayH - 14, 12, 3);
   ctx.fillStyle = '#9ca3af';
   ctx.font = '11px -apple-system, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText('市值', pad.left + 16, displayH - 10);
+  ctx.fillText('市值', legendX + 16, displayH - 10);
 
   ctx.strokeStyle = 'rgba(99,102,241,0.4)';
   ctx.setLineDash([4, 4]);
   ctx.beginPath();
-  ctx.moveTo(pad.left + 56, displayH - 12);
-  ctx.lineTo(pad.left + 68, displayH - 12);
+  ctx.moveTo(legendX + 56, displayH - 12);
+  ctx.lineTo(legendX + 68, displayH - 12);
   ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillText('成本', pad.left + 72, displayH - 10);
+  ctx.fillText('成本', legendX + 72, displayH - 10);
 
-  // Hover
+  // 滚动定位：默认停在最新一端；切换区间后回到最新端，重新渲染时保持当前位置
+  if (chartScrollToEnd) {
+    scrollWrap.scrollLeft = scrollWrap.scrollWidth;
+    chartScrollToEnd = false;
+  }
+
+  // 左右拖拽平移 + 悬浮提示
+  let dragging = false, dragStartX = 0, dragStartScroll = 0;
+  const tooltip = document.getElementById('chart-tooltip');
+  const hideTooltip = () => { tooltip.style.display = 'none'; };
+
+  canvas.onmousedown = (e) => {
+    dragging = true;
+    dragStartX = e.clientX;
+    dragStartScroll = scrollWrap.scrollLeft;
+    canvas.style.cursor = 'grabbing';
+    hideTooltip();
+    e.preventDefault();
+  };
   canvas.onmousemove = (e) => {
+    if (dragging) {
+      scrollWrap.scrollLeft = dragStartScroll - (e.clientX - dragStartX);
+      return;
+    }
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
-    const tooltip = document.getElementById('chart-tooltip');
 
     let closest = -1, minDist = Infinity;
     data.forEach((s, i) => {
@@ -724,15 +750,16 @@ function renderTrendChart() {
       const pnlRate = s.totalCost > 0 ? (pnl / s.totalCost * 100).toFixed(2) : '0.00';
       tooltip.innerHTML = `<div>${s.date}</div><div>市值: ${maskText(`¥${thousands(s.totalValue)}`)}</div><div>成本: ${maskText(`¥${thousands(s.totalCost)}`)}</div><div class="${pnl >= 0 ? 'positive' : 'negative'}">收益: ${maskText(`${pnl >= 0 ? '+' : ''}¥${thousands(pnl)} (${pnl >= 0 ? '+' : ''}${pnlRate}%)`)}</div>`;
       tooltip.style.display = 'block';
-      const tx = toX(closest);
-      const ty = toY(values[closest]);
-      tooltip.style.left = Math.min(tx + 12, displayW - 180) + 'px';
-      tooltip.style.top = Math.max(ty - 60, 4) + 'px';
+      const outerRect = outer.getBoundingClientRect();
+      tooltip.style.left = Math.min(e.clientX - outerRect.left + 14, outer.clientWidth - 190) + 'px';
+      tooltip.style.top = Math.max(e.clientY - outerRect.top - 70, 4) + 'px';
     } else {
-      tooltip.style.display = 'none';
+      hideTooltip();
     }
   };
-  canvas.onmouseleave = () => { document.getElementById('chart-tooltip').style.display = 'none'; };
+  const endDrag = () => { dragging = false; canvas.style.cursor = 'grab'; };
+  canvas.onmouseup = endDrag;
+  canvas.onmouseleave = () => { endDrag(); hideTooltip(); };
 }
 
 function formatCompact(n) {
@@ -846,6 +873,7 @@ document.querySelectorAll('.chart-range').forEach(btn => {
     document.querySelectorAll('.chart-range').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     chartRange = btn.dataset.range;
+    chartScrollToEnd = true;
     renderTrendChart();
   });
 });
