@@ -793,6 +793,11 @@ th {
 .allocation-value { color: var(--text-muted); }
 .allocation-pct { font-weight: 600; min-width: 52px; text-align: right; }
 
+/* Sortable table header */
+.th-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.th-sortable:hover { color: var(--primary); }
+.th-sort-icon { color: var(--primary); font-size: 11px; }
+
 /* Privacy toggle */
 .btn-privacy {
   background: none;

@@ -431,6 +431,7 @@ function renderAccounts(accounts, holdings, transactions) {
 
 // --- 持仓明细账户筛选 ---
 let holdingFilter = ''; // '' = 全部账户
+let holdingSort = '';   // '' = 默认顺序 | 'desc' | 'asc'（按总金额）
 
 function renderHoldingFilter(accounts, holdings) {
   const el = document.getElementById('holding-filter');
@@ -445,13 +446,23 @@ function renderHoldingFilter(accounts, holdings) {
 
 function renderHoldings(holdings, accounts) {
   renderHoldingFilter(accounts, holdings);
-  const tbody = document.getElementById('holdings-tbody');
-  const visible = holdingFilter ? holdings.filter(h => h.accountId === holdingFilter) : holdings;
+  const sortIcon = document.getElementById('th-sort-icon');
+  if (sortIcon) sortIcon.textContent = holdingSort === 'desc' ? '▼' : holdingSort === 'asc' ? '▲' : '';
+  let visible = holdingFilter ? holdings.filter(h => h.accountId === holdingFilter) : [...holdings];
+  if (holdingSort) {
+    visible.sort((a, b) => {
+      const va = (a.shares || 0) * (a.currentNav || 0);
+      const vb = (b.shares || 0) * (b.currentNav || 0);
+      return holdingSort === 'desc' ? vb - va : va - vb;
+    });
+  }
   if (visible.length === 0) {
+    const tbody = document.getElementById('holdings-tbody');
     tbody.innerHTML = '<tr><td colspan="10" class="empty-state">暂无持仓数据</td></tr>';
     return;
   }
   const transactions = vaultData?.transactions || [];
+  const tbody = document.getElementById('holdings-tbody');
   tbody.innerHTML = visible.map(h => {
     const acc = accounts.find(a => a.id === h.accountId);
     const isCash = h.productType === '现金';
@@ -1887,6 +1898,12 @@ document.getElementById('holding-filter').addEventListener('click', e => {
   holdingFilter = chip.dataset.acc;
   renderHoldings(vaultData.holdings, vaultData.accounts);
 });
+
+// 持仓总金额排序：默认顺序 → 从高到低 → 从低到高 → 默认
+window.toggleHoldingSort = function() {
+  holdingSort = holdingSort === '' ? 'desc' : holdingSort === 'desc' ? 'asc' : '';
+  renderHoldings(vaultData.holdings, vaultData.accounts);
+};
 
 // 快录列表：实时涨跌显示 + 回车跳下一行（最后一行回车=提交）
 const quickListEl = document.getElementById('quick-list');
