@@ -50,7 +50,6 @@
       <div class="actions">
         <button class="btn btn-primary btn-sm" id="btn-quick">⚡ 今日快录</button>
         <button class="btn btn-secondary btn-sm" id="btn-backup" title="导出加密备份文件">备份</button>
-        <button class="btn btn-secondary btn-sm" onclick="openModal('modal-csv')">CSV 导入</button>
         <button class="btn btn-secondary btn-sm" id="btn-logout">退出</button>
       </div>
     </div>
@@ -553,37 +552,6 @@
     </div>
   </div>
 
-  <!-- Modal: CSV Import -->
-  <div class="modal" id="modal-csv">
-    <div class="modal-content">
-      <h2>CSV 导入</h2>
-      <form id="form-csv">
-        <div class="form-group">
-          <label>导入到账户</label>
-          <select id="csv-account" required></select>
-        </div>
-        <div class="form-group">
-          <label>导入类型</label>
-          <select id="csv-type">
-            <option value="holdings">持仓数据</option>
-            <option value="transactions">交易记录</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>CSV 文件</label>
-          <input type="file" id="csv-file" accept=".csv" required>
-        </div>
-        <p style="font-size:13px;color:var(--text-muted);margin-top:8px">
-          持仓 CSV 列名：基金代码, 基金名称, 份额, 成本净值, 最新净值<br>
-          交易 CSV 列名：基金代码, 基金名称, 类型, 金额, 份额, 日期
-        </p>
-        <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-csv')">取消</button>
-          <button type="submit" class="btn btn-primary">导入</button>
-        </div>
-      </form>
-    </div>
-  </div>
 
   <!-- Modal: Edit Transaction -->
   <div class="modal" id="modal-edit-transaction">

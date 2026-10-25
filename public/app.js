@@ -1063,9 +1063,8 @@ function populateProductTypeSelect(selectId, currentValue) {
 }
 
 function openModal(id) {
-  if (id === 'modal-holding' || id === 'modal-csv') {
-    const selectMap = { 'modal-holding': 'hold-account', 'modal-csv': 'csv-account' };
-    populateAccountSelect(selectMap[id]);
+  if (id === 'modal-holding') {
+    populateAccountSelect('hold-account');
   }
   if (id === 'modal-holding') {
     document.getElementById('hold-product-type').value = '';
@@ -1649,56 +1648,6 @@ function handleEditTransaction(e) {
     .then(() => { closeModal('modal-edit-transaction'); renderDashboard(); })
     .catch(showError);
 }
-
-function handleCsvImport(e) {
-  e.preventDefault();
-  const file = document.getElementById('csv-file').files[0];
-  const accountId = document.getElementById('csv-account').value;
-  const importType = document.getElementById('csv-type').value;
-  if (!file || !accountId) return showError('请选择文件和账户');
-  const reader = new FileReader();
-  reader.onload = async function(ev) {
-    try {
-      const text = ev.target.result;
-      const lines = text.split(/\r?\n/).filter(l => l.trim());
-      if (lines.length < 2) return showError('CSV 文件为空');
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-      const rows = lines.slice(1).map(line => {
-        const vals = line.split(',').map(v => v.trim());
-        return Object.fromEntries(headers.map((h, i) => [h, vals[i]]));
-      });
-      if (importType === 'holdings') {
-        rows.forEach(r => {
-          const fundCode = r['基金代码'] || r['代码'] || r['code'] || '';
-          const fundName = r['基金名称'] || r['名称'] || r['name'] || '';
-          const shares = parseFloat(r['份额'] || r['shares'] || '0');
-          const costPerShare = parseFloat(r['成本净值'] || r['成本'] || r['cost'] || '0');
-          const currentNav = parseFloat(r['最新净值'] || r['净值'] || r['nav'] || costPerShare);
-          if (fundName && shares > 0) vaultData.holdings.push({ id: crypto.randomUUID(), accountId, fundCode, fundName, shares, costPerShare, currentNav, date: new Date().toISOString().split('T')[0] });
-        });
-      } else {
-        rows.forEach(r => {
-          const fundCode = r['基金代码'] || r['代码'] || r['code'] || '';
-          const fundName = r['基金名称'] || r['名称'] || r['name'] || '';
-          const type = r['类型'] || r['type'] || 'buy';
-          const amount = parseFloat(r['金额'] || r['amount'] || '0');
-          const shares = parseFloat(r['份额'] || r['shares'] || '0');
-          const date = r['日期'] || r['date'] || '';
-          if (fundName && date) vaultData.transactions.push({ id: crypto.randomUUID(), accountId, fundCode, fundName, type, amount, shares, date });
-        });
-      }
-      await saveVault();
-      closeModal('modal-csv');
-      renderDashboard();
-      showError('导入成功！', true);
-    } catch (err) {
-      console.error('CSV import failed:', err);
-      showError('CSV 文件解析失败，请检查文件格式后重试');
-    }
-  };
-  reader.readAsText(file, 'UTF-8');
-}
-
 // --- Quick Daily Entry (今日快录) ---
 let quickNavSeries = new Map(); // fundCode -> Map(dateStr -> nav)
 
@@ -2059,7 +2008,6 @@ document.getElementById('form-edit-holding').addEventListener('submit', handleEd
 document.getElementById('form-ocr-confirm').addEventListener('submit', handleOCRConfirm);
 document.getElementById('form-transaction').addEventListener('submit', handleAddTransaction);
 document.getElementById('form-edit-transaction').addEventListener('submit', handleEditTransaction);
-document.getElementById('form-csv').addEventListener('submit', handleCsvImport);
 document.getElementById('btn-logout').addEventListener('click', handleLogout);
 
 // 点击弹窗背景区域关闭弹窗（移动端友好）
