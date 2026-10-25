@@ -30,6 +30,10 @@
       <span class="switch-link" id="switch-link" onclick="switchAuthMode(document.getElementById('auth-form').dataset.mode === 'login' ? 'register' : 'login')">
         没有账户？去注册
       </span>
+      <span class="switch-link import-link" onclick="document.getElementById('import-backup-file').click()">
+        导入备份（换库/恢复数据）
+      </span>
+      <input type="file" id="import-backup-file" accept=".json,application/json" style="display:none">
     </div>
   </div>
 
@@ -39,6 +43,7 @@
       <h1>藏金阁</h1>
       <div class="actions">
         <button class="btn btn-primary btn-sm" id="btn-quick">⚡ 今日快录</button>
+        <button class="btn btn-secondary btn-sm" id="btn-backup" title="导出加密备份文件">备份</button>
         <button class="btn btn-secondary btn-sm" onclick="openModal('modal-csv')">CSV 导入</button>
         <button class="btn btn-secondary btn-sm" id="btn-logout">退出</button>
       </div>

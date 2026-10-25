@@ -143,6 +143,14 @@ body {
   backdrop-filter: blur(8px);
 }
 
+#error-msg.success {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: var(--positive);
+  color: var(--positive);
+}
+
+.import-link { margin-top: 8px; font-size: 13px; }
+
 /* Dashboard */
 #dashboard {
   display: none;

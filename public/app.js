@@ -299,12 +299,13 @@ async function saveVault() {
 }
 
 // --- Render ---
-function showError(msg) {
+function showError(msg, ok = false) {
   const text = msg instanceof Error ? msg.message : String(msg ?? '');
   if (!text) return;
   const el = document.getElementById('error-msg');
   if (!el) { alert(text); return; }
   el.textContent = text;
+  el.classList.toggle('success', !!ok);
   el.style.display = 'block';
   el.style.zIndex = '100000';
   clearTimeout(el._hideTimer);
@@ -1631,7 +1632,7 @@ function handleCsvImport(e) {
       await saveVault();
       closeModal('modal-csv');
       renderDashboard();
-      showError('导入成功！');
+      showError('导入成功！', true);
     } catch (err) {
       console.error('CSV import failed:', err);
       showError('CSV 文件解析失败，请检查文件格式后重试');
@@ -1923,6 +1924,73 @@ function updatePrivacyButton() {
   btn.title = privacyMode ? '金额已隐藏，点击显示' : '隐藏金额，防止旁人看到';
 }
 
+// --- 数据备份与恢复 ---
+// 备份 = 当前金库的加密密文 + 密码哈希，与数据库无关，可在任何后端间迁移恢复
+async function buildBackupPayload() {
+  const encrypted = await encrypt(JSON.stringify(vaultData), currentPassword);
+  const passwordHash = await hashPassword(currentPassword);
+  return {
+    app: 'cangjinge',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    vaultId,
+    passwordHash,
+    encryptedData: encrypted,
+  };
+}
+
+window.handleBackup = async function() {
+  if (!vaultData || !currentPassword) return;
+  try {
+    const payload = await buildBackupPayload();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    a.href = url;
+    a.download = `藏金阁备份-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    showError('备份文件已开始下载，请妥善保存（备份文件与密码缺一不可）', true);
+  } catch (e) {
+    console.error('Backup failed:', e);
+    showError('备份失败，请稍后重试');
+  }
+};
+
+// 导入备份：把备份文件写入当前页面连接的数据库（换库恢复 / 同库恢复均可）
+window.applyBackupImport = async function(jsonText) {
+  let payload;
+  try { payload = JSON.parse(jsonText); } catch { return showError('备份文件格式不正确，请选择由「备份」导出的文件'); }
+  const valid = payload && payload.app === 'cangjinge'
+    && typeof payload.encryptedData === 'string' && payload.encryptedData.length >= 100 && payload.encryptedData.length < 10 * 1024 * 1024
+    && typeof payload.passwordHash === 'string' && payload.passwordHash.length === 44;
+  if (!valid) return showError('这不是有效的藏金阁备份文件');
+  try {
+    // 已有同密码金库 → 覆盖恢复；没有 → 注册导入
+    let existingId = null;
+    try {
+      const found = await api('login', { passwordHash: payload.passwordHash });
+      if (found && !found.error && found.id) existingId = found.id;
+    } catch { /* 未找到，走注册 */ }
+    if (existingId) {
+      await api('save', { id: existingId, encryptedData: payload.encryptedData });
+    } else {
+      await api('register', { passwordHash: payload.passwordHash, encryptedData: payload.encryptedData });
+    }
+    switchAuthMode('login');
+    showError('导入成功！请用备份时设置的密码登录', true);
+  } catch (e) {
+    showError(e && e.message ? e.message : '导入失败，请稍后重试');
+  }
+};
+
+// 供调试/测试：返回备份文件文本内容
+window.exportBackupData = async () => JSON.stringify(await buildBackupPayload(), null, 2);
+
 // --- Init ---
 updatePrivacyButton();
 document.getElementById('auth-form').addEventListener('submit', handleAuth);
@@ -1934,6 +2002,16 @@ document.getElementById('form-transaction').addEventListener('submit', handleAdd
 document.getElementById('form-edit-transaction').addEventListener('submit', handleEditTransaction);
 document.getElementById('form-csv').addEventListener('submit', handleCsvImport);
 document.getElementById('btn-logout').addEventListener('click', handleLogout);
+document.getElementById('btn-backup').addEventListener('click', handleBackup);
+document.getElementById('import-backup-file').addEventListener('change', function() {
+  const file = this.files && this.files[0];
+  this.value = '';
+  if (!file) return;
+  if (file.size > 11 * 1024 * 1024) return showError('备份文件过大，请确认选择了正确的文件');
+  const reader = new FileReader();
+  reader.onload = (ev) => applyBackupImport(ev.target.result);
+  reader.readAsText(file, 'UTF-8');
+});
 document.getElementById('btn-quick').addEventListener('click', openQuickEntry);
 document.getElementById('form-quick').addEventListener('submit', handleQuickSave);
 document.getElementById('btn-quick-fetch').addEventListener('click', handleQuickFetch);
