@@ -152,15 +152,34 @@ function calcTxAmount(priceId, sharesId, amountId) {
 }
 
 // --- API ---
+const API_ERROR_COPY = {
+  invalid_input: '提交的数据有误，请检查后重试',
+  not_found: '未找到对应数据，请刷新后重试',
+  method_not_allowed: '请求方式不受支持，请刷新页面后重试',
+  database_request_failed: '服务器暂时不可用，请稍后重试',
+  database_runtime_unavailable: '服务器暂时不可用，请稍后重试',
+};
+
+function friendlyError(code) {
+  return API_ERROR_COPY[code] || '操作失败，请稍后重试';
+}
+
 async function api(action, body = null) {
   const opts = { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
   const url = body ? `${API_BASE}?action=${action}` : `${API_BASE}?action=${action}&id=${vaultId}`;
-  const res = await fetch(url, opts);
+  let res;
+  try {
+    res = await fetch(url, opts);
+  } catch {
+    throw new Error('网络连接失败，请检查网络后重试');
+  }
   if (!res.ok) {
+    console.error('API request failed:', action, res.status);
     // 金库已在服务端被重建/清理时，旧页面的保存会 404，给出可操作的提示
     if (res.status === 404 && action === 'save') throw new Error('登录状态已失效，请刷新页面后重新登录');
-    throw new Error(`API error: ${res.status}`);
+    const code = res.status === 400 ? 'invalid_input' : res.status === 404 ? 'not_found' : res.status === 503 ? 'database_request_failed' : '';
+    throw new Error(friendlyError(code));
   }
   return res.json();
 }
@@ -186,13 +205,18 @@ async function handleAuth(e) {
       const emptyVault = JSON.stringify({ accounts: [], holdings: [], transactions: [], snapshots: [], journal: [] });
       const encrypted = await encrypt(emptyVault, password);
       const result = await api('register', { passwordHash: pwHash, encryptedData: encrypted });
-      if (result.error) throw new Error(result.error);
+      if (result.error) {
+        console.error('Register failed:', result.error);
+        throw new Error(friendlyError(result.error));
+      }
       vaultId = result.id;
       currentPassword = password;
       vaultData = JSON.parse(emptyVault);
     } else {
       const result = await api('login', { passwordHash: pwHash });
-      if (result.error) throw new Error(result.error === 'not_found' ? '未找到数据，请先注册' : '密码错误');
+      if (result.error) {
+        throw new Error(result.error === 'not_found' ? '未找到数据，请先注册' : friendlyError(result.error));
+      }
       vaultId = result.id;
       try {
         const decrypted = await decrypt(result.encryptedData, password);
@@ -207,7 +231,7 @@ async function handleAuth(e) {
     }
     showDashboard();
   } catch (err) {
-    showError(err.message);
+    showError(err && err.message ? err.message : '操作失败，请稍后重试');
   } finally {
     btn.disabled = false;
     btn.textContent = isRegister ? '注册' : '登录';
@@ -250,7 +274,10 @@ async function persistVault() {
   const plaintext = JSON.stringify(vaultData);
   const encrypted = await encrypt(plaintext, currentPassword);
   const result = await api('save', { id: vaultId, encryptedData: encrypted });
-  if (result.error) throw new Error(result.error);
+  if (result.error) {
+    console.error('Save failed:', result.error);
+    throw new Error(friendlyError(result.error));
+  }
 }
 
 async function saveVault() {
@@ -261,9 +288,11 @@ async function saveVault() {
 
 // --- Render ---
 function showError(msg) {
+  const text = msg instanceof Error ? msg.message : String(msg ?? '');
+  if (!text) return;
   const el = document.getElementById('error-msg');
-  if (!el) { alert(msg); return; }
-  el.textContent = msg;
+  if (!el) { alert(text); return; }
+  el.textContent = text;
   el.style.display = 'block';
   el.style.zIndex = '100000';
   clearTimeout(el._hideTimer);
@@ -1077,7 +1106,11 @@ async function initOCR() {
       logger: (m) => { if (m.status === 'recognizing text') loadingText.textContent = `正在识别... ${Math.round(m.progress * 100)}%`; }
     });
     return ocrWorker;
-  } catch (err) { showError(err.message); return null; }
+  } catch (err) {
+    console.error('OCR init failed:', err);
+    showError('识别引擎加载失败，请检查网络后重试');
+    return null;
+  }
   finally { loadingEl.style.display = 'none'; ocrLoading = false; }
 }
 
@@ -1095,7 +1128,10 @@ async function processImageOCR(dataUrl, type) {
     let parsed = type === 'holding' ? parseHoldingOCR(text) : parseTransactionOCR(text);
     if (type === 'holding') parsed.productType = pendingProductType;
     showOCRConfirmation(parsed, type);
-  } catch (err) { showError('识别失败: ' + err.message); }
+  } catch (err) {
+    console.error('OCR failed:', err);
+    showError('图片识别失败，请重试或改用手动录入');
+  }
   finally { loadingEl.style.display = 'none'; }
 }
 
@@ -1266,9 +1302,9 @@ function handleOCRConfirm(e) {
       vaultData.transactions.push({ id: crypto.randomUUID(), accountId, fundCode, fundName, type, price, amount, shares, date });
     }
     closeModal('modal-ocr-confirm');
-    saveVault().then(() => renderDashboard()).catch(err => showError('保存失败: ' + err.message));
+    saveVault().then(() => renderDashboard()).catch(showError);
   } catch (err) {
-    showError('操作失败: ' + err.message);
+    showError(err && err.message ? err.message : '操作失败，请稍后重试');
   }
 }
 
@@ -1428,7 +1464,10 @@ function handleCsvImport(e) {
       closeModal('modal-csv');
       renderDashboard();
       showError('导入成功！');
-    } catch (err) { showError('CSV 解析失败: ' + err.message); }
+    } catch (err) {
+      console.error('CSV import failed:', err);
+      showError('CSV 文件解析失败，请检查文件格式后重试');
+    }
   };
   reader.readAsText(file, 'UTF-8');
 }
