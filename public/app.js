@@ -396,6 +396,7 @@ function renderDashboard() {
   renderHoldings(holdings, accounts);
   renderTransactions(transactions, accounts);
   renderTrendChart();
+  renderAllocation();
   renderHistory();
   renderJournal();
 }
@@ -717,6 +718,106 @@ function renderTrendChart() {
 function formatCompact(n) {
   if (Math.abs(n) >= 10000) return (n / 10000).toFixed(1) + '万';
   return n.toFixed(0);
+}
+
+// --- 资产配置（产品类型占比环形图）---
+const ALLOCATION_COLORS = {
+  '股票型基金': '#6366f1',
+  '债券型基金': '#38bdf8',
+  '现金': '#22c55e',
+  '理财': '#eab308',
+  '股票': '#f97316',
+  '期权': '#ec4899',
+};
+
+let allocationDate = 'latest'; // 'latest' = 当前持仓，否则为快照日期
+
+function allocationColor(type) { return ALLOCATION_COLORS[type] || '#9ca3af'; }
+
+// 计算某一时点各产品类型的市值：latest 用当前持仓，否则用当天快照
+function computeAllocation(dateKey) {
+  let items;
+  if (!dateKey || dateKey === 'latest') {
+    items = (vaultData?.holdings || []).map(h => ({ productType: h.productType || '其他', value: (h.shares || 0) * (h.currentNav || 0) }));
+  } else {
+    const snap = (vaultData?.snapshots || []).find(s => s.date === dateKey);
+    if (!snap) return [];
+    items = (snap.holdings || []).map(h => ({ productType: h.productType || '其他', value: (h.shares || 0) * (h.currentNav || 0) }));
+  }
+  const map = new Map();
+  items.forEach(it => map.set(it.productType, (map.get(it.productType) || 0) + it.value));
+  return [...map.entries()]
+    .filter(([, v]) => v > 0)
+    .map(([productType, value]) => ({ productType, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
+function renderAllocation() {
+  const section = document.getElementById('allocation-section');
+  if (!section) return;
+
+  // 日期下拉：最新持仓 + 全部快照日期（倒序）
+  const dates = [...new Set((vaultData?.snapshots || []).map(s => s.date))].sort().reverse();
+  const options = ['latest', ...dates];
+  if (!options.includes(allocationDate)) allocationDate = 'latest';
+  const sel = document.getElementById('allocation-date');
+  sel.innerHTML = options.map(d => `<option value="${d}">${d === 'latest' ? '最新持仓' : d}</option>`).join('');
+  sel.value = allocationDate;
+
+  const data = computeAllocation(allocationDate);
+  const total = data.reduce((s, d) => s + d.value, 0);
+  if (total <= 0) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = 'block';
+
+  document.getElementById('allocation-legend').innerHTML = data.map(d => {
+    const pct = (d.value / total) * 100;
+    return `
+      <div class="allocation-legend-row">
+        <span class="allocation-dot" style="background:${allocationColor(d.productType)}"></span>
+        <span class="allocation-name">${esc(d.productType)}</span>
+        <span class="allocation-value">${maskText(`¥${d.value.toFixed(2)}`)}</span>
+        <span class="allocation-pct">${pct.toFixed(1)}%</span>
+      </div>`;
+  }).join('');
+
+  // 环形图
+  const canvas = document.getElementById('allocation-chart');
+  const dpr = window.devicePixelRatio || 1;
+  const size = 200;
+  canvas.width = size * dpr;
+  canvas.height = size * dpr;
+  canvas.style.width = size + 'px';
+  canvas.style.height = size + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, size, size);
+
+  const cx = size / 2, cy = size / 2;
+  const outer = size / 2 - 6;
+  const inner = outer * 0.62;
+  let start = -Math.PI / 2;
+  data.forEach(d => {
+    const angle = (d.value / total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, outer, start, start + angle);
+    ctx.arc(cx, cy, inner, start + angle, start, true);
+    ctx.closePath();
+    ctx.fillStyle = allocationColor(d.productType);
+    ctx.fill();
+    ctx.strokeStyle = '#1a1d27';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    start += angle;
+  });
+
+  const totalLabel = total >= 10000 ? `¥${(total / 10000).toFixed(2)}万` : `¥${total.toFixed(2)}`;
+  ctx.fillStyle = '#e4e4e7';
+  ctx.font = '600 14px -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(maskText(totalLabel), cx, cy + 5);
 }
 
 // Chart range buttons
@@ -1876,7 +1977,13 @@ setupImageUpload('holding-upload-trigger', 'holding-image', 'holding-preview', '
 setupImageUpload('tx-upload-trigger', 'tx-image', 'tx-preview', 'tx-preview-img', 'transaction');
 
 // Resize chart on window resize
-window.addEventListener('resize', () => { if (vaultData) renderTrendChart(); });
+// 资产配置日期切换
+document.getElementById('allocation-date').addEventListener('change', function() {
+  allocationDate = this.value;
+  renderAllocation();
+});
+
+window.addEventListener('resize', () => { if (vaultData) { renderTrendChart(); renderAllocation(); } });
 
 function switchAuthMode(mode) {
   const form = document.getElementById('auth-form');

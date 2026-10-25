@@ -751,6 +751,48 @@ th {
 
 .tx-edit-disabled { color: var(--text-muted); font-size: 12px; }
 
+/* Asset allocation */
+.allocation-date-select {
+  background: var(--border);
+  color: var(--text);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+}
+
+.allocation-wrap {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 16px 20px;
+  flex-wrap: wrap;
+}
+
+.allocation-canvas-wrap { flex: 0 0 auto; }
+
+.allocation-legend {
+  flex: 1 1 220px;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.allocation-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.allocation-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.allocation-name { flex: 1; }
+.allocation-value { color: var(--text-muted); }
+.allocation-pct { font-weight: 600; min-width: 52px; text-align: right; }
+
 /* Privacy toggle */
 .btn-privacy {
   background: none;
