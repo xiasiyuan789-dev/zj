@@ -751,6 +751,23 @@ th {
 
 .tx-edit-disabled { color: var(--text-muted); font-size: 12px; }
 
+/* Privacy toggle */
+.btn-privacy {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 1px 7px;
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+  margin-left: 6px;
+  vertical-align: middle;
+  transition: all 0.2s;
+}
+
+.btn-privacy:hover { border-color: var(--primary); color: var(--primary); }
+
 /* Responsive */
 @media (max-width: 768px) {
   #dashboard { padding: 16px; }

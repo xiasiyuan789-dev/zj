@@ -14,6 +14,12 @@ let pendingProductType = '';
 // Chart state
 let chartRange = 'all';
 
+// 金额显隐（隐私模式）：开启后所有金额/份额/净值以 **** 显示，状态持久化
+let privacyMode = false;
+try { privacyMode = localStorage.getItem('fv-privacy') === '1'; } catch {}
+
+function maskText(s) { return privacyMode ? '****' : String(s); }
+
 const PRODUCT_TYPES = ['股票型基金', '债券型基金', '现金', '理财', '股票', '期权'];
 
 // --- Cash & holding side effects of transactions ---
@@ -372,19 +378,19 @@ function renderDashboard() {
   const rateBase = invested > 0 ? invested : totalCost;
   const totalPnlRate = rateBase > 0 ? (totalPnl / rateBase * 100).toFixed(2) : '0.00';
 
-  document.getElementById('total-assets').textContent = `¥${totalAssets.toFixed(2)}`;
-  document.getElementById('total-pnl').textContent = `${totalPnl >= 0 ? '+' : ''}¥${totalPnl.toFixed(2)}`;
+  document.getElementById('total-assets').textContent = maskText(`¥${totalAssets.toFixed(2)}`);
+  document.getElementById('total-pnl').textContent = maskText(`${totalPnl >= 0 ? '+' : ''}¥${totalPnl.toFixed(2)}`);
   document.getElementById('total-pnl').className = totalPnl >= 0 ? 'positive' : 'negative';
-  document.getElementById('total-pnl-rate').textContent = `${totalPnl >= 0 ? '+' : ''}${totalPnlRate}%`;
+  document.getElementById('total-pnl-rate').textContent = maskText(`${totalPnl >= 0 ? '+' : ''}${totalPnlRate}%`);
   document.getElementById('total-pnl-rate').className = totalPnl >= 0 ? 'positive' : 'negative';
   const splitEl = document.getElementById('pnl-split');
   if (splitEl) {
-    splitEl.textContent = `已实现 ${realized >= 0 ? '+' : ''}¥${realized.toFixed(2)} · 浮动 ${floatingPnl >= 0 ? '+' : ''}¥${floatingPnl.toFixed(2)}`;
+    splitEl.textContent = maskText(`已实现 ${realized >= 0 ? '+' : ''}¥${realized.toFixed(2)} · 浮动 ${floatingPnl >= 0 ? '+' : ''}¥${floatingPnl.toFixed(2)}`);
     splitEl.className = 'stat-sub ' + (totalPnl >= 0 ? 'positive' : 'negative');
   }
   document.getElementById('account-count').textContent = accounts.length;
-  document.getElementById('cash-total').textContent = `¥${cashTotal.toFixed(2)}`;
-  document.getElementById('invest-total').textContent = `¥${investTotal.toFixed(2)}`;
+  document.getElementById('cash-total').textContent = maskText(`¥${cashTotal.toFixed(2)}`);
+  document.getElementById('invest-total').textContent = maskText(`¥${investTotal.toFixed(2)}`);
 
   renderAccounts(accounts, holdings, transactions);
   renderHoldings(holdings, accounts);
@@ -415,8 +421,8 @@ function renderAccounts(accounts, holdings, transactions) {
           </div>
         </div>
         <div class="account-stats">
-          <span>资产: ¥${accValue.toFixed(2)}</span>
-          <span class="${accPnl >= 0 ? 'positive' : 'negative'}">收益: ${accPnl >= 0 ? '+' : ''}¥${accPnl.toFixed(2)}</span>
+          <span>资产: ${maskText(`¥${accValue.toFixed(2)}`)}</span>
+          <span class="${accPnl >= 0 ? 'positive' : 'negative'}">收益: ${maskText(`${accPnl >= 0 ? '+' : ''}¥${accPnl.toFixed(2)}`)}</span>
         </div>
       </div>`;
   }).join('');
@@ -459,19 +465,23 @@ function renderHoldings(holdings, accounts) {
     const name = isCash ? (h.fundName || '现金') : h.fundName;
 
     if (isCash) {
+      // 现金是总金额而非份额：份额/成本净值/最新净值列显示 -，金额落在「总金额」列
       return `
         <tr>
           <td>${esc(acc?.name || '未知')}</td>
           <td><span class="product-type-tag cash-tag">${esc(h.productType)}</span></td>
           <td>${esc(name)}</td>
-          <td colspan="4" class="cash-amount-cell">¥${marketValue.toFixed(2)}</td>
+          <td>-</td>
+          <td>-</td>
+          <td>-</td>
+          <td class="cash-amount-cell">${maskText(`¥${marketValue.toFixed(2)}`)}</td>
           <td>-</td>
           <td>${h.date || '-'}</td>
           <td><button class="btn-edit" onclick="editHolding('${h.id}')">编辑</button></td>
         </tr>`;
     }
-    const costLabel = costPerShare.toFixed(4);
-    const sharesLabel = displayShares.toFixed(2);
+    const costLabel = maskText(costPerShare.toFixed(4));
+    const sharesLabel = maskText(displayShares.toFixed(2));
     return `
       <tr>
         <td>${esc(acc?.name || '未知')}</td>
@@ -479,10 +489,10 @@ function renderHoldings(holdings, accounts) {
         <td>${esc(h.fundName)}</td>
         <td>${sharesLabel}</td>
         <td>${costLabel}</td>
-        <td>${(h.currentNav || 0).toFixed(4)}</td>
-        <td>¥${marketValue.toFixed(2)}</td>
+        <td>${maskText((h.currentNav || 0).toFixed(4))}</td>
+        <td>${maskText(`¥${marketValue.toFixed(2)}`)}</td>
         <td class="${pnl >= 0 ? 'positive' : 'negative'}">
-          ${pnl >= 0 ? '+' : ''}¥${pnl.toFixed(2)} (${pnl >= 0 ? '+' : ''}${pnlRate}%)
+          ${maskText(`${pnl >= 0 ? '+' : ''}¥${pnl.toFixed(2)}`)} (${maskText(`${pnl >= 0 ? '+' : ''}${pnlRate}%`)})
         </td>
         <td>${h.date || '-'}</td>
         <td><button class="btn-edit" onclick="editHolding('${h.id}')">编辑</button></td>
@@ -502,8 +512,8 @@ function renderTransactions(transactions, accounts) {
     const isTransfer = t.type === 'transfer';
     const typeLabel = t.type === 'buy' ? '买入' : t.type === 'sell' ? '卖出' : isTransfer ? '转账' : '分红';
     const typeClass = t.type === 'buy' ? 'buy' : t.type === 'sell' ? 'sell' : isTransfer ? 'transfer' : 'dividend';
-    const priceStr = t.price != null ? t.price.toFixed(4) : '-';
-    const sharesStr = t.shares != null ? t.shares.toFixed(2) : '-';
+    const priceStr = t.price != null ? maskText(t.price.toFixed(4)) : '-';
+    const sharesStr = t.shares != null ? maskText(t.shares.toFixed(2)) : '-';
     const toAcc = isTransfer ? accounts.find(a => a.id === t.toAccountId) : null;
     const accCell = isTransfer
       ? `${esc(acc?.name || '未知')} → ${esc(toAcc?.name || '未知')}`
@@ -519,7 +529,7 @@ function renderTransactions(transactions, accounts) {
         <td><span class="tx-type ${typeClass}">${typeLabel}</span></td>
         <td>${priceStr}</td>
         <td>${sharesStr}</td>
-        <td>${t.type === 'dividend' ? '-' : `¥${t.amount.toFixed(2)}`}</td>
+        <td>${t.type === 'dividend' ? '-' : maskText(`¥${t.amount.toFixed(2)}`)}</td>
         <td>${editCell}</td>
       </tr>`;
   }).join('');
@@ -583,7 +593,7 @@ function renderTrendChart() {
     ctx.fillStyle = '#9ca3af';
     ctx.font = '11px -apple-system, sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText(formatCompact(val), pad.left - 8, y + 4);
+    ctx.fillText(maskText(formatCompact(val)), pad.left - 8, y + 4);
   }
 
   // X labels
@@ -691,7 +701,7 @@ function renderTrendChart() {
       const s = data[closest];
       const pnl = s.totalValue - s.totalCost;
       const pnlRate = s.totalCost > 0 ? (pnl / s.totalCost * 100).toFixed(2) : '0.00';
-      tooltip.innerHTML = `<div>${s.date}</div><div>市值: ¥${s.totalValue.toFixed(2)}</div><div>成本: ¥${s.totalCost.toFixed(2)}</div><div class="${pnl >= 0 ? 'positive' : 'negative'}">收益: ${pnl >= 0 ? '+' : ''}¥${pnl.toFixed(2)} (${pnl >= 0 ? '+' : ''}${pnlRate}%)</div>`;
+      tooltip.innerHTML = `<div>${s.date}</div><div>市值: ${maskText(`¥${s.totalValue.toFixed(2)}`)}</div><div>成本: ${maskText(`¥${s.totalCost.toFixed(2)}`)}</div><div class="${pnl >= 0 ? 'positive' : 'negative'}">收益: ${maskText(`${pnl >= 0 ? '+' : ''}¥${pnl.toFixed(2)} (${pnl >= 0 ? '+' : ''}${pnlRate}%)`)}</div>`;
       tooltip.style.display = 'block';
       const tx = toX(closest);
       const ty = toY(values[closest]);
@@ -739,9 +749,9 @@ function renderHistory() {
       <div class="history-holding-row">
         <span class="history-holding-name">${esc(h.accountName)} · ${esc(h.fundName)}</span>
         <span class="history-holding-detail">
-          ${h.shares.toFixed(2)}份 · 净值${h.currentNav.toFixed(4)} ·
+          ${maskText(h.shares.toFixed(2))}份 · 净值${maskText(h.currentNav.toFixed(4))} ·
           <span class="${(h.shares * h.currentNav - h.shares * h.costPerShare) >= 0 ? 'positive' : 'negative'}">
-            ${(h.shares * h.currentNav - h.shares * h.costPerShare) >= 0 ? '+' : ''}¥${(h.shares * h.currentNav - h.shares * h.costPerShare).toFixed(2)}
+            ${maskText(`${(h.shares * h.currentNav - h.shares * h.costPerShare) >= 0 ? '+' : ''}¥${(h.shares * h.currentNav - h.shares * h.costPerShare).toFixed(2)}`)}
           </span>
         </span>
       </div>
@@ -752,10 +762,10 @@ function renderHistory() {
         <div class="history-header" onclick="toggleHistory(${idx})">
           <div>
             <span class="history-date">${snap.date}</span>
-            <span class="history-value">¥${snap.totalValue.toFixed(2)}</span>
+            <span class="history-value">${maskText(`¥${snap.totalValue.toFixed(2)}`)}</span>
           </div>
           <div class="history-summary">
-            <span class="${pnl >= 0 ? 'positive' : 'negative'}">${pnl >= 0 ? '+' : ''}¥${pnl.toFixed(2)} (${pnl >= 0 ? '+' : ''}${pnlRate}%)</span>
+            <span class="${pnl >= 0 ? 'positive' : 'negative'}">${maskText(`${pnl >= 0 ? '+' : ''}¥${pnl.toFixed(2)} (${pnl >= 0 ? '+' : ''}${pnlRate}%)`)}</span>
             <span class="history-toggle" id="history-toggle-${idx}">▼</span>
           </div>
         </div>
@@ -956,7 +966,7 @@ function renderTxFundPicker() {
       <div class="picker-account">
         <div class="picker-account-header">
           <span class="picker-account-name">${esc(acc.name)}</span>
-          <span class="picker-account-cash">现金 ¥${getAccountCash(acc.id).toFixed(2)}</span>
+          <span class="picker-account-cash">现金 ${maskText(`¥${getAccountCash(acc.id).toFixed(2)}`)}</span>
         </div>
         <div class="picker-funds">${tiles || '<span class="picker-no-fund">无持仓</span>'}</div>
       </div>`;
@@ -969,7 +979,7 @@ function pickerTileHtml(h, label, sub, icon) {
     <span class="picker-tile-icon">${icon}</span>
     <span class="picker-tile-body">
       <span class="picker-tile-name">${esc(label)}</span>
-      <span class="picker-tile-sub">${esc(sub)}</span>
+      <span class="picker-tile-sub">${maskText(sub)}</span>
     </span>
   </button>`;
 }
@@ -987,7 +997,7 @@ window.selectTxFund = function(holdingId) {
   document.querySelectorAll('#tx-fund-picker .picker-tile').forEach(b =>
     b.classList.toggle('selected', b.dataset.holding === holdingId));
   document.getElementById('tx-cash-bar').style.display = 'flex';
-  document.getElementById('tx-cash-balance').textContent = `¥${getAccountCash(h.accountId).toFixed(2)}`;
+  document.getElementById('tx-cash-balance').textContent = maskText(`¥${getAccountCash(h.accountId).toFixed(2)}`);
   const isCash = txSelection.isCash;
   document.getElementById('tx-normal-fields').style.display = isCash ? 'none' : 'block';
   document.getElementById('tx-transfer-fields').style.display = isCash ? 'block' : 'none';
@@ -1740,7 +1750,23 @@ function handleLogout() {
   document.getElementById('auth-screen').style.display = 'flex';
 }
 
+// --- 金额显隐 ---
+window.togglePrivacy = function() {
+  privacyMode = !privacyMode;
+  try { localStorage.setItem('fv-privacy', privacyMode ? '1' : '0'); } catch {}
+  updatePrivacyButton();
+  if (vaultData) renderDashboard();
+};
+
+function updatePrivacyButton() {
+  const btn = document.getElementById('privacy-toggle');
+  if (!btn) return;
+  btn.textContent = privacyMode ? '🙈' : '👁';
+  btn.title = privacyMode ? '金额已隐藏，点击显示' : '隐藏金额，防止旁人看到';
+}
+
 // --- Init ---
+updatePrivacyButton();
 document.getElementById('auth-form').addEventListener('submit', handleAuth);
 document.getElementById('form-account').addEventListener('submit', handleAddAccount);
 document.getElementById('form-rename-account').addEventListener('submit', handleRenameAccount);
