@@ -469,6 +469,23 @@ th {
 
 .btn-edit:hover { background: rgba(99, 102, 241, 0.25); }
 
+/* Row action buttons */
+.ops-cell { white-space: nowrap; }
+.btn-del {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--negative);
+  border: none;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+  margin-left: 6px;
+}
+
+.btn-del:hover { background: rgba(239, 68, 68, 0.25); }
+
 /* Chart */
 .chart-container {
   position: relative;

@@ -499,7 +499,7 @@ function renderHoldings(holdings, accounts) {
           <td class="cash-amount-cell">${maskText(`¥${thousands(marketValue)}`)}</td>
           <td>-</td>
           <td>${h.date || '-'}</td>
-          <td><button class="btn-edit" onclick="editHolding('${h.id}')">编辑</button></td>
+          <td class="ops-cell"><button class="btn-edit" onclick="editHolding('${h.id}')">编辑</button><button class="btn-del" onclick="deleteHolding('${h.id}')">删除</button></td>
         </tr>`;
     }
     const costLabel = maskText(costPerShare.toFixed(4));
@@ -517,7 +517,7 @@ function renderHoldings(holdings, accounts) {
           ${maskText(`${pnl >= 0 ? '+' : ''}¥${thousands(pnl)}`)} (${maskText(`${pnl >= 0 ? '+' : ''}${pnlRate}%`)})
         </td>
         <td>${h.date || '-'}</td>
-        <td><button class="btn-edit" onclick="editHolding('${h.id}')">编辑</button></td>
+        <td class="ops-cell"><button class="btn-edit" onclick="editHolding('${h.id}')">编辑</button><button class="btn-del" onclick="deleteHolding('${h.id}')">删除</button></td>
       </tr>`;
   }).join('');
 }
@@ -938,6 +938,15 @@ window.toggleHistory = function(idx) {
 };
 
 // --- Edit Holding ---
+window.deleteHolding = async function(id) {
+  const h = vaultData.holdings.find(x => x.id === id);
+  if (!h) return;
+  const name = h.productType === '现金' ? '现金持仓' : (h.fundName || '该持仓');
+  if (!confirm(`确定删除「${name}」吗？\n删除后不再显示，相关交易记录会保留。`)) return;
+  vaultData.holdings = vaultData.holdings.filter(x => x.id !== id);
+  try { await saveVault(); renderDashboard(); } catch (e) { showError(e && e.message ? e.message : '删除失败，请稍后重试'); }
+};
+
 window.editHolding = function(id) {
   const h = vaultData.holdings.find(x => x.id === id);
   if (!h) return;
